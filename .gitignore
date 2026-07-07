@@ -1,0 +1,12 @@
+node_modules/
+.next/
+out/
+
+# local reference material — not part of the shipped app
+public/PetCatch example.mp4
+.env*.local
+.env
+.vercel
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store

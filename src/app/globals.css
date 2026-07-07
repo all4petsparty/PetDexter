@@ -1,0 +1,93 @@
+@import "tailwindcss";
+
+@theme {
+  /* PetCatch festival palette — sunny, playful, high-energy */
+  --color-sunny: #ffd23f;
+  --color-sunny-deep: #f5b700;
+  --color-sky: #4fc3f7;
+  --color-sky-deep: #0ea5e9;
+  --color-tangerine: #ff8a3d;
+  --color-tangerine-deep: #f4611e;
+  --color-grass: #7bc950;
+  --color-grass-deep: #4f9d2f;
+  --color-bubblegum: #ff7eb6;
+  --color-cream: #fff9ec;
+  --color-ink: #2d2a32;
+
+  --font-display: var(--font-baloo), "Baloo 2", "Comic Sans MS", cursive;
+  --font-script: var(--font-caveat), "Caveat", cursive;
+
+  --radius-card: 1.75rem;
+
+  --animate-bounce-tap: bounce-tap 0.25s ease-out;
+  --animate-pop-in: pop-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  --animate-twinkle: twinkle 1.4s ease-in-out infinite;
+  --animate-bob: bob 2.4s ease-in-out infinite;
+  --animate-wiggle: wiggle 0.5s ease-in-out;
+
+  @keyframes bounce-tap {
+    0% { transform: scale(1); }
+    40% { transform: scale(0.88); }
+    100% { transform: scale(1); }
+  }
+
+  @keyframes pop-in {
+    0% { transform: scale(0.6); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+
+  @keyframes twinkle {
+    0%, 100% { opacity: 0; transform: scale(0.4) rotate(0deg); }
+    50% { opacity: 1; transform: scale(1) rotate(20deg); }
+  }
+
+  @keyframes bob {
+    0%, 100% { transform: translateY(0) rotate(-1.5deg); }
+    50% { transform: translateY(-10px) rotate(1.5deg); }
+  }
+
+  @keyframes wiggle {
+    0%, 100% { transform: rotate(0deg) scale(1); }
+    25% { transform: rotate(-6deg) scale(1.05); }
+    75% { transform: rotate(6deg) scale(1.05); }
+  }
+}
+
+html,
+body {
+  background: var(--color-cream);
+  color: var(--color-ink);
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Bouncy micro-interaction applied to every tappable control */
+.tappable {
+  transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.tappable:active {
+  transform: scale(0.88);
+}
+
+/* White die-cut outline around transparent cutouts (sticker-book look) */
+.sticker {
+  filter: drop-shadow(2px 0 0 white) drop-shadow(-2px 0 0 white)
+    drop-shadow(0 2px 0 white) drop-shadow(0 -2px 0 white)
+    drop-shadow(0 6px 10px rgba(45, 42, 50, 0.25));
+}
+
+/* Dotted journal paper behind the sticker collection */
+.dotted-paper {
+  background-color: #fffdf5;
+  background-image: radial-gradient(rgba(45, 42, 50, 0.1) 1.5px, transparent 1.5px);
+  background-size: 18px 18px;
+}
+
+/* Painterly meadow backdrop for the trading card art area */
+.card-meadow {
+  background:
+    radial-gradient(ellipse 80% 45% at 85% 8%, rgba(255, 210, 63, 0.9), transparent 60%),
+    radial-gradient(ellipse 120% 55% at 50% 108%, #7bc950 0%, rgba(123, 201, 80, 0.65) 55%, transparent 78%),
+    radial-gradient(ellipse 90% 60% at 15% 95%, rgba(79, 157, 47, 0.5), transparent 70%),
+    linear-gradient(180deg, #bfe7fb 0%, #dff2fd 45%, #eef9e8 100%);
+}
