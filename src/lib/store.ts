@@ -52,10 +52,15 @@ export interface BattleChampion {
 
 /** An active Steal War over a contested pet. */
 export interface BattleState {
-  /** The pet both players scanned — at stake for the loser. */
   contested: PetCard;
   rivalName: string;
   venueName: string;
+}
+
+export interface AuthUser {
+  id: string;
+  email: string | null;
+  name: string | null;
 }
 
 interface AppState {
@@ -63,30 +68,57 @@ interface AppState {
   activeView: ViewKey;
   setActiveView: (view: ViewKey) => void;
 
+  // Entry gates (persisted)
+  consentAccepted: boolean;
+  setConsentAccepted: (v: boolean) => void;
+  guestMode: boolean;
+  setGuestMode: (v: boolean) => void;
+  hasOnboarded: boolean;
+  setHasOnboarded: (v: boolean) => void;
+
+  // Auth session (memory only — Supabase persists its own session)
+  authUser: AuthUser | null;
+  setAuthUser: (u: AuthUser | null) => void;
+
   // Geolocation
   position: { lat: number; lng: number } | null;
   setPosition: (position: { lat: number; lng: number } | null) => void;
 
-  // B2B venue check-in — stamps subsequent captures with the venue name
+  // B2B venue check-in
   checkedInVenue: CheckedInVenue | null;
   setCheckedInVenue: (venue: CheckedInVenue | null) => void;
 
-  // The user's PetDex (persisted to localStorage for offline/demo play)
+  // The user's PetDex (persisted)
   collection: PetCard[];
   setCollection: (cards: PetCard[]) => void;
   addCard: (card: PetCard) => void;
   updateCard: (id: string, patch: Partial<PetCard>) => void;
   removeCard: (id: string) => void;
 
-  // ⚔️ Steal War in progress (overlay when set)
+  // ⚔️ Steal War in progress
   activeBattle: BattleState | null;
   setActiveBattle: (battle: BattleState | null) => void;
 
-  // Trainer XP (persisted) — earned on discoveries and revisits
+  // Trainer XP (persisted)
   userXp: number;
   addXp: (amount: number) => void;
 
-  // Result of the latest capture, shown as a celebration overlay
+  // 🥫 Game economy (persisted)
+  cans: { count: number; lastRefillAt: number };
+  setCans: (cans: { count: number; lastRefillAt: number }) => void;
+  coins: number;
+  addCoins: (n: number) => void;
+  treats: number;
+  addTreats: (n: number) => void;
+  streakDays: number;
+  lastCatchDay: string | null;
+  registerCatch: (dayKey: string) => void;
+  claimedAchievements: string[];
+  claimAchievement: (id: string) => void;
+  adCoinsDay: string | null;
+  setAdCoinsDay: (day: string) => void;
+
+  // Result of the latest capture
   lastCaptureOutcome: CaptureOutcomeState;
   setLastCaptureOutcome: (outcome: CaptureOutcomeState) => void;
 }
@@ -96,6 +128,16 @@ export const useAppStore = create<AppState>()(
     (set) => ({
       activeView: "map",
       setActiveView: (view) => set({ activeView: view }),
+
+      consentAccepted: false,
+      setConsentAccepted: (consentAccepted) => set({ consentAccepted }),
+      guestMode: false,
+      setGuestMode: (guestMode) => set({ guestMode }),
+      hasOnboarded: false,
+      setHasOnboarded: (hasOnboarded) => set({ hasOnboarded }),
+
+      authUser: null,
+      setAuthUser: (authUser) => set({ authUser }),
 
       position: null,
       setPosition: (position) => set({ position }),
@@ -119,13 +161,53 @@ export const useAppStore = create<AppState>()(
       userXp: 0,
       addXp: (amount) => set((s) => ({ userXp: s.userXp + amount })),
 
+      cans: { count: 4, lastRefillAt: Date.now() },
+      setCans: (cans) => set({ cans }),
+      coins: 0,
+      addCoins: (n) => set((s) => ({ coins: Math.max(0, s.coins + n) })),
+      treats: 0,
+      addTreats: (n) => set((s) => ({ treats: Math.max(0, s.treats + n) })),
+      streakDays: 0,
+      lastCatchDay: null,
+      registerCatch: (dayKey) =>
+        set((s) => {
+          if (s.lastCatchDay === dayKey) return {};
+          const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+          return {
+            lastCatchDay: dayKey,
+            streakDays: s.lastCatchDay === yesterday ? s.streakDays + 1 : 1,
+          };
+        }),
+      claimedAchievements: [],
+      claimAchievement: (id) =>
+        set((s) =>
+          s.claimedAchievements.includes(id)
+            ? {}
+            : { claimedAchievements: [...s.claimedAchievements, id] }
+        ),
+      adCoinsDay: null,
+      setAdCoinsDay: (adCoinsDay) => set({ adCoinsDay }),
+
       lastCaptureOutcome: null,
       setLastCaptureOutcome: (lastCaptureOutcome) => set({ lastCaptureOutcome }),
     }),
     {
       name: "petcatch-store",
       storage: createJSONStorage(() => localStorage),
-      partialize: (s) => ({ collection: s.collection, userXp: s.userXp }),
+      partialize: (s) => ({
+        collection: s.collection,
+        userXp: s.userXp,
+        consentAccepted: s.consentAccepted,
+        guestMode: s.guestMode,
+        hasOnboarded: s.hasOnboarded,
+        cans: s.cans,
+        coins: s.coins,
+        treats: s.treats,
+        streakDays: s.streakDays,
+        lastCatchDay: s.lastCatchDay,
+        claimedAchievements: s.claimedAchievements,
+        adCoinsDay: s.adCoinsDay,
+      }),
       // Rehydrated manually in AppShell after mount to avoid SSR mismatch
       skipHydration: true,
     }

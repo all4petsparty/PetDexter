@@ -6,6 +6,8 @@ import { preloadModels, grabFrame, checkLiveness, analyzeFrame, imageToDataUrl, 
 import { sillyName, randomStats } from "@/lib/cardFactory";
 import { submitCapture } from "@/lib/capture";
 import { startDemoBattle } from "@/lib/battle";
+import { currentCans, spendCan, formatDuration, grantCans, MAX_CANS } from "@/lib/economy";
+import RewardedAd from "@/components/RewardedAd";
 
 type Phase = "idle" | "loading_models" | "scanning" | "rejected";
 
@@ -24,6 +26,7 @@ const REJECT_MESSAGES: Record<string, string> = {
   screen_detected: "That looks like a screen! 📺 PetCatch only counts real-life friends.",
   no_animal: "No pet spotted! 🔍 Get a dog, cat, rabbit, or bird in the frame.",
   too_still: "Too still! 🖼️ Static photos don't count — find a live wiggly friend.",
+  no_cans: "Out of snack cans! 🥫 Wait for a refill or watch an ad for a bonus can.",
   error: "Scan hiccup! 😵 Give it another try.",
 };
 
@@ -45,6 +48,18 @@ export default function CaptureView() {
   const [rejectReason, setRejectReason] = useState<string | null>(null);
   // 0 = idle, 1 = pet spotted, 2 = signature read, 3 = cutting out
   const [scanStep, setScanStep] = useState(0);
+  const [showAd, setShowAd] = useState(false);
+  const cansState = useAppStore((s) => s.cans);
+  void cansState; // subscribe: re-render when cans change
+  const { count: canCount, nextRefillMs } = currentCans();
+
+  /** One scan costs one snack can (CatchCat-style energy). */
+  function takeCan(): boolean {
+    if (spendCan()) return true;
+    setRejectReason("no_cans");
+    setPhase("rejected");
+    return false;
+  }
 
   useEffect(() => {
     if (activeView !== "capture") return;
@@ -99,6 +114,7 @@ export default function CaptureView() {
   async function handleCapture() {
     const video = videoRef.current;
     if (!video || video.readyState < 2 || phase === "scanning") return;
+    if (!takeCan()) return;
 
     setPhase("scanning");
     setRejectReason(null);
@@ -119,6 +135,7 @@ export default function CaptureView() {
 
   async function handleDemoScan(src: string) {
     if (phase === "scanning") return;
+    if (!takeCan()) return;
     setPhase("scanning");
     setRejectReason(null);
     try {
@@ -142,11 +159,23 @@ export default function CaptureView() {
           <h1 className="text-3xl font-extrabold text-ink">Catch a Pet! 📸</h1>
           <p className="text-ink/60">Point at a real animal to scan it.</p>
         </div>
-        {checkedInVenue && (
-          <span className="animate-pop-in rounded-full bg-grass px-3 py-1 text-xs font-bold text-white">
-            📍 {checkedInVenue.name}
-          </span>
-        )}
+        <div className="flex flex-col items-end gap-1">
+          <button
+            type="button"
+            onClick={() => canCount < MAX_CANS && setShowAd(true)}
+            className="tappable rounded-full bg-white px-3 py-1.5 text-sm font-extrabold shadow-md"
+          >
+            🥫 {canCount}/{MAX_CANS}
+            {nextRefillMs != null && (
+              <span className="ml-1 text-[10px] font-bold text-ink/40">+1 in {formatDuration(nextRefillMs)}</span>
+            )}
+          </button>
+          {checkedInVenue && (
+            <span className="animate-pop-in rounded-full bg-grass px-3 py-1 text-xs font-bold text-white">
+              📍 {checkedInVenue.name}
+            </span>
+          )}
+        </div>
       </header>
 
       <div className="relative aspect-[3/4] overflow-hidden rounded-card bg-ink shadow-lg">
@@ -255,6 +284,14 @@ export default function CaptureView() {
           </p>
         )}
       </section>
+
+      {showAd && (
+        <RewardedAd
+          rewardLabel="1 snack can"
+          onComplete={() => grantCans(1)}
+          onClose={() => setShowAd(false)}
+        />
+      )}
     </div>
   );
 }

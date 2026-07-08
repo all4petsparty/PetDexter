@@ -10,3 +10,4 @@ public/PetCatch example.mp4
 *.tsbuildinfo
 next-env.d.ts
 .DS_Store
+.env*

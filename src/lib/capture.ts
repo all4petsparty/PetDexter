@@ -1,6 +1,15 @@
 import { useAppStore, type PetCard, type Species } from "@/lib/store";
 import { cosineSimilarity } from "@/lib/vision";
 import { rollRarity, xpForDiscovery, XP_FOR_REVISIT } from "@/lib/cardFactory";
+import { COINS_NEW_DISCOVERY, COINS_REVISIT, TREATS_NEW_DISCOVERY, todayKey } from "@/lib/economy";
+
+/** Coins, treats, and streak bookkeeping for any successful catch. */
+function awardCatchEconomy(isNew: boolean) {
+  const store = useAppStore.getState();
+  store.addCoins(isNew ? COINS_NEW_DISCOVERY : COINS_REVISIT);
+  if (isNew) store.addTreats(TREATS_NEW_DISCOVERY);
+  store.registerCatch(todayKey());
+}
 
 const SIMILARITY_THRESHOLD = 0.95;
 
@@ -78,6 +87,7 @@ async function submitToSupabase(payload: CapturePayload): Promise<CaptureOutcome
   if (data.outcome === "revisit") {
     store.updateCard(data.card_id, { level: data.level, candy: data.candy });
     store.addXp(XP_FOR_REVISIT);
+    awardCatchEconomy(false);
     return {
       outcome: "revisit",
       cardId: data.card_id,
@@ -108,6 +118,7 @@ async function submitToSupabase(payload: CapturePayload): Promise<CaptureOutcome
   store.addCard(card);
   const xp = xpForDiscovery(card.rarity);
   store.addXp(xp);
+  awardCatchEconomy(true);
   return { outcome: "new_discovery", card, xp };
 }
 
@@ -133,6 +144,7 @@ function submitLocally(
     const candy = existing.candy + 3;
     store.updateCard(bestId, { level, candy });
     store.addXp(XP_FOR_REVISIT);
+    awardCatchEconomy(false);
     return { outcome: "revisit", cardId: bestId, level, candy, xp: XP_FOR_REVISIT };
   }
 
@@ -158,5 +170,6 @@ function submitLocally(
   store.addCard(card);
   const xp = xpForDiscovery(card.rarity);
   store.addXp(xp);
+  awardCatchEconomy(true);
   return { outcome: "new_discovery", card, xp };
 }
