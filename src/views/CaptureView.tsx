@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useAppStore } from "@/lib/store";
-import { preloadModels, grabFrame, checkLiveness, analyzeFrame, imageToDataUrl, segmentPet } from "@/lib/vision";
+import { preloadModels, grabFrame, checkLiveness, classifyFrame, imageToDataUrl, segmentPet, embedSignature } from "@/lib/vision";
 import { sillyName, randomStats } from "@/lib/cardFactory";
 import { submitCapture } from "@/lib/capture";
 import { startDemoBattle } from "@/lib/battle";
@@ -14,6 +14,8 @@ type Phase = "idle" | "loading_models" | "scanning" | "rejected";
 /** Sample photos for trying the AI pipeline without a live pet in front of you. */
 const DEMO_PETS = [
   { src: "/demo/dog.jpg", emoji: "🐶", label: "Corgi" },
+  // same corgi, different framing — demonstrates re-identification
+  { src: "/demo/dog2.jpg", emoji: "🐶", label: "Corgi again" },
   { src: "/demo/cat.jpg", emoji: "🐱", label: "Cat" },
   { src: "/demo/bird.jpg", emoji: "🐦", label: "Macaw" },
   { src: "/demo/rabbit.jpg", emoji: "🐰", label: "Bunny" },
@@ -40,7 +42,8 @@ export default function CaptureView() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const activeView = useAppStore((s) => s.activeView);
   const checkedInVenue = useAppStore((s) => s.checkedInVenue);
-  const setLastCaptureOutcome = useAppStore((s) => s.setLastCaptureOutcome);
+  const setCaptureFlow = useAppStore((s) => s.setCaptureFlow);
+  const patchCaptureFlow = useAppStore((s) => s.patchCaptureFlow);
   const collection = useAppStore((s) => s.collection);
 
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -83,32 +86,46 @@ export default function CaptureView() {
     return () => stream?.getTracks().forEach((t) => t.stop());
   }, [activeView]);
 
-  /** Classification + anti-spoofing + embedding + cutout + uniqueness + mint. */
+  /**
+   * Staged scan: classification is the only blocking step (~1-2s). The
+   * catch minigame opens immediately after it passes; the cutout, the
+   * DINOv2 signature, and the uniqueness verdict stream in while the
+   * player drags the treat — the game itself hides the compute time.
+   */
   async function processScan(dataUrl: string) {
     setScanStep(1);
-    const scan = await analyzeFrame(dataUrl);
+    const scan = await classifyFrame(dataUrl);
     if (!scan.ok) {
       setRejectReason(scan.reason ?? "error");
       setPhase("rejected");
       setScanStep(0);
       return;
     }
-    setScanStep(2);
-    // Cut the pet out of the photo — the sticker used on its card
-    const cutoutUrl = await segmentPet(dataUrl);
-    setScanStep(3);
-    const outcome = await submitCapture({
-      dataUrl,
-      signature: scan.signature,
-      species: scan.species,
-      breed: scan.breed,
-      customName: sillyName(scan.species),
-      stats: randomStats(),
-      cutoutUrl,
-    });
-    setLastCaptureOutcome(outcome);
+
+    // A wild pet appeared! Open the minigame right away
+    setCaptureFlow({ photoUrl: dataUrl, species: scan.species, cutoutUrl: null, outcome: null });
     setPhase("idle");
     setScanStep(0);
+
+    // …and finish the heavy lifting in the background
+    try {
+      const cutoutUrl = await segmentPet(dataUrl);
+      patchCaptureFlow({ cutoutUrl }); // the sticker pops in live
+      // identity comes from the background-free cutout
+      const signature = await embedSignature(cutoutUrl ?? dataUrl);
+      const outcome = await submitCapture({
+        dataUrl,
+        signature,
+        species: scan.species,
+        breed: scan.breed,
+        customName: sillyName(scan.species),
+        stats: randomStats(),
+        cutoutUrl,
+      });
+      patchCaptureFlow({ outcome });
+    } catch {
+      patchCaptureFlow({ failed: true });
+    }
   }
 
   async function handleCapture() {

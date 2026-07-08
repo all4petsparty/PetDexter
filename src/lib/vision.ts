@@ -2,13 +2,15 @@ import type { Species } from "@/lib/store";
 
 /**
  * On-device AI pipeline (Transformers.js) — zero backend compute.
- *  - image-classification (ViT, ImageNet-1k): species + breed best-guess,
- *    plus screen/monitor detection for anti-spoofing
- *  - image-feature-extraction (ViT in21k): 768-d CLS embedding, the pet's
- *    unique signature matched with pgvector cosine similarity server-side
+ *  - Runs on WebGPU when available (3-10× faster), WASM otherwise
+ *  - image-classification (ViT, ImageNet-1k): species + breed + anti-spoofing
+ *  - background-removal (RMBG-1.4 / ISNet): the sticker cutout
+ *  - image-feature-extraction (DINOv2-small): 384-d instance embedding taken
+ *    from the CUTOUT (background removed) — the pet's re-identification
+ *    signature. DINOv2 features separate individuals far better than
+ *    classification features, so the same pet is recognized across angles.
  */
 
-// ImageNet-1k class-index ranges per species (index-based beats string matching)
 const SPECIES_RANGES: [Species, [number, number][]][] = [
   ["bird", [[7, 24], [80, 100], [127, 146]]],
   ["dog", [[151, 268]]],
@@ -16,126 +18,79 @@ const SPECIES_RANGES: [Species, [number, number][]][] = [
   ["rabbit", [[330, 332]]],
 ];
 
-// Labels that indicate the camera is pointed at a device, not a live animal
 const SPOOF_WORDS = [
   "monitor", "screen", "television", "laptop", "desktop computer",
   "notebook", "cellular", "ipod", "projector", "web site", "hand-held computer",
 ];
 
-export interface ScanResult {
+export const SIGNATURE_DIM = 384; // DINOv2-small CLS token
+
+export interface ClassifyResult {
   ok: boolean;
   reason?: "no_animal" | "screen_detected" | "too_still";
   species: Species;
   breed: string | null;
   confidence: number;
-  signature: number[];
 }
+
+export type ProgressCallback = (pct: number) => void;
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 let classifierPromise: Promise<any> | null = null;
 let extractorPromise: Promise<any> | null = null;
 let segmenterPromise: Promise<any> | null = null;
 
-async function getClassifier() {
-  if (!classifierPromise) {
-    classifierPromise = import("@huggingface/transformers").then(({ pipeline }) =>
-      pipeline("image-classification", "Xenova/vit-base-patch16-224", { dtype: "q8" })
-    );
+// Aggregate download progress across all model files
+const fileProgress = new Map<string, number>();
+let progressListener: ProgressCallback | null = null;
+export function onModelProgress(cb: ProgressCallback | null) {
+  progressListener = cb;
+}
+function trackProgress(p: any) {
+  if (p?.status === "progress" && p.file) {
+    fileProgress.set(p.file, p.progress ?? 0);
+    if (progressListener) {
+      const vals = [...fileProgress.values()];
+      progressListener(Math.round(vals.reduce((a, b) => a + b, 0) / vals.length));
+    }
   }
+}
+
+/** WebGPU when the browser has it; a failed WebGPU init falls back to WASM. */
+async function makePipeline(task: string, model: string, extra: Record<string, unknown> = {}) {
+  const { pipeline } = await import("@huggingface/transformers");
+  const base = { dtype: "q8", progress_callback: trackProgress, ...extra } as any;
+  if (typeof navigator !== "undefined" && (navigator as any).gpu) {
+    try {
+      return await pipeline(task as any, model, { ...base, device: "webgpu" });
+    } catch {
+      // WebGPU unavailable for this model/driver — use WASM
+    }
+  }
+  return pipeline(task as any, model, base);
+}
+
+async function getClassifier() {
+  classifierPromise ??= makePipeline("image-classification", "Xenova/vit-base-patch16-224");
   return classifierPromise;
 }
-
 async function getExtractor() {
-  if (!extractorPromise) {
-    extractorPromise = import("@huggingface/transformers").then(({ pipeline }) =>
-      pipeline("image-feature-extraction", "Xenova/vit-base-patch16-224-in21k", { dtype: "q8" })
-    );
-  }
+  extractorPromise ??= makePipeline("image-feature-extraction", "Xenova/dinov2-small");
   return extractorPromise;
 }
-
 async function getSegmenter() {
-  if (!segmenterPromise) {
-    segmenterPromise = import("@huggingface/transformers").then(({ pipeline }) =>
-      pipeline("background-removal", "briaai/RMBG-1.4", {
-        dtype: "q8",
-        // RMBG-1.4's config.json declares a bogus model_type; it's an ISNet
-        // architecture, which Transformers.js supports natively
-        config: { model_type: "isnet" } as any,
-      })
-    );
-  }
+  // RMBG-1.4 ships a bogus model_type; it's really an ISNet
+  segmenterPromise ??= makePipeline("background-removal", "briaai/RMBG-1.4", {
+    config: { model_type: "isnet" },
+  });
   return segmenterPromise;
 }
 
-/** Kick off model downloads early (called when the Capture tab opens). */
+/** Kick off all model downloads (called from onboarding + capture tab). */
 export function preloadModels() {
   getClassifier().catch(() => {});
   getExtractor().catch(() => {});
   getSegmenter().catch(() => {});
-}
-
-/**
- * Cut the pet out of its photo (on-device background removal, RMBG-1.4).
- * Returns a transparent WebP/PNG data URL — the "sticker" used on cards
- * and in the collection book. Returns null if segmentation fails.
- */
-export async function segmentPet(dataUrl: string): Promise<string | null> {
-  try {
-    const segmenter = await getSegmenter();
-    const output = await segmenter(dataUrl);
-    // background-removal returns RawImage(s) with the alpha matte applied
-    const raw = Array.isArray(output) ? output[0] : output;
-    if (!raw) return null;
-
-    const canvas = document.createElement("canvas");
-    canvas.width = raw.width;
-    canvas.height = raw.height;
-    const ctx = canvas.getContext("2d")!;
-    if (typeof raw.toCanvas === "function") {
-      ctx.drawImage(raw.toCanvas(), 0, 0);
-    } else {
-      const pixels = ctx.createImageData(raw.width, raw.height);
-      pixels.data.set(raw.data);
-      ctx.putImageData(pixels, 0, 0);
-    }
-
-    // Trim transparent borders so the sticker hugs the pet
-    const trimmed = trimTransparent(canvas);
-    // WebP keeps alpha and is ~4x smaller than PNG in localStorage
-    const webp = trimmed.toDataURL("image/webp", 0.82);
-    return webp.startsWith("data:image/webp") ? webp : trimmed.toDataURL("image/png");
-  } catch (err) {
-    console.warn("[petcatch] cutout failed, card falls back to full photo:", err);
-    return null;
-  }
-}
-
-function trimTransparent(canvas: HTMLCanvasElement): HTMLCanvasElement {
-  const ctx = canvas.getContext("2d")!;
-  const { data, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  let minX = width, minY = height, maxX = 0, maxY = 0;
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      if (data[(y * width + x) * 4 + 3] > 16) {
-        if (x < minX) minX = x;
-        if (x > maxX) maxX = x;
-        if (y < minY) minY = y;
-        if (y > maxY) maxY = y;
-      }
-    }
-  }
-  if (maxX <= minX || maxY <= minY) return canvas; // fully transparent — keep as is
-  const pad = 6;
-  minX = Math.max(0, minX - pad);
-  minY = Math.max(0, minY - pad);
-  maxX = Math.min(width - 1, maxX + pad);
-  maxY = Math.min(height - 1, maxY + pad);
-  const out = document.createElement("canvas");
-  out.width = maxX - minX + 1;
-  out.height = maxY - minY + 1;
-  out.getContext("2d")!.drawImage(canvas, minX, minY, out.width, out.height, 0, 0, out.width, out.height);
-  return out;
 }
 
 /** Load an image URL into a downscaled JPEG data URL (demo scans). */
@@ -164,16 +119,11 @@ export function grabFrame(video: HTMLVideoElement, maxSide = 512): string {
   return canvas.toDataURL("image/jpeg", 0.85);
 }
 
-/**
- * Liveness heuristic: sample two frames ~650 ms apart, compare downsampled
- * grayscale. A live scene (breathing animal + handheld phone) always has some
- * motion; near-zero diff suggests a paused screen or printed photo on a stand.
- */
+/** Liveness heuristic: two frames ~650ms apart must differ (live scene). */
 export async function checkLiveness(video: HTMLVideoElement): Promise<boolean> {
   const sample = () => {
     const c = document.createElement("canvas");
-    c.width = 32;
-    c.height = 32;
+    c.width = 32; c.height = 32;
     c.getContext("2d")!.drawImage(video, 0, 0, 32, 32);
     const { data } = c.getContext("2d")!.getImageData(0, 0, 32, 32);
     const gray = new Float32Array(1024);
@@ -182,37 +132,29 @@ export async function checkLiveness(video: HTMLVideoElement): Promise<boolean> {
     }
     return gray;
   };
-
   const a = sample();
   await new Promise((r) => setTimeout(r, 650));
   const b = sample();
-
   let diff = 0;
   for (let i = 0; i < 1024; i++) diff += Math.abs(a[i] - b[i]);
-  return diff / 1024 >= 0.8; // mean per-pixel delta threshold (0–255 scale)
+  return diff / 1024 >= 0.8;
 }
 
 function titleCase(label: string): string {
-  return label
-    .split(",")[0]
-    .split(" ")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
+  return label.split(",")[0].split(" ")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 }
 
-/** Classify species/breed + extract the 768-d signature, all in-browser. */
-export async function analyzeFrame(dataUrl: string): Promise<ScanResult> {
-  const [classifier, extractor] = await Promise.all([getClassifier(), getExtractor()]);
-
+/** Stage 1 (fast): species/breed classification + screen anti-spoofing. */
+export async function classifyFrame(dataUrl: string): Promise<ClassifyResult> {
+  const classifier = await getClassifier();
   const preds: { label: string; score: number }[] = await classifier(dataUrl, { top_k: 10 });
 
-  // Reverse-map labels to ImageNet indices for robust species bucketing
   const id2label: Record<string, string> = classifier.model.config.id2label ?? {};
   const labelToId = new Map(Object.entries(id2label).map(([id, l]) => [l, Number(id)]));
 
   const speciesScores = new Map<Species, { score: number; best: string; bestScore: number }>();
   let spoofScore = 0;
-
   for (const { label, score } of preds) {
     if (SPOOF_WORDS.some((w) => label.toLowerCase().includes(w))) {
       spoofScore += score;
@@ -224,10 +166,7 @@ export async function analyzeFrame(dataUrl: string): Promise<ScanResult> {
       if (ranges.some(([lo, hi]) => idx >= lo && idx <= hi)) {
         const cur = speciesScores.get(species) ?? { score: 0, best: label, bestScore: 0 };
         cur.score += score;
-        if (score > cur.bestScore) {
-          cur.best = label;
-          cur.bestScore = score;
-        }
+        if (score > cur.bestScore) { cur.best = label; cur.bestScore = score; }
         speciesScores.set(species, cur);
       }
     }
@@ -237,33 +176,108 @@ export async function analyzeFrame(dataUrl: string): Promise<ScanResult> {
   let breed: string | null = null;
   let confidence = 0;
   for (const [s, v] of speciesScores) {
-    if (v.score > confidence) {
-      confidence = v.score;
-      species = s;
-      breed = titleCase(v.best);
-    }
+    if (v.score > confidence) { confidence = v.score; species = s; breed = titleCase(v.best); }
   }
 
-  const fail = (reason: ScanResult["reason"]): ScanResult => ({
-    ok: false, reason, species, breed, confidence, signature: [],
-  });
-
-  if (spoofScore > 0.3 && spoofScore > confidence) return fail("screen_detected");
-  if (confidence < 0.15) return fail("no_animal");
-
-  // 768-d CLS embedding, L2-normalized so cosine similarity is well-behaved
-  const output = await extractor(dataUrl);
-  const cls = Array.from(output.data.slice(0, 768) as Float32Array);
-  const norm = Math.hypot(...cls) || 1;
-  const signature = cls.map((v) => v / norm);
-
-  return { ok: true, species, breed, confidence, signature };
+  if (spoofScore > 0.3 && spoofScore > confidence)
+    return { ok: false, reason: "screen_detected", species, breed, confidence };
+  if (confidence < 0.15)
+    return { ok: false, reason: "no_animal", species, breed, confidence };
+  return { ok: true, species, breed, confidence };
 }
 
-/** Cosine similarity for the local (offline/demo) uniqueness fallback. */
+/** Stage 2: cut the pet out of the photo (transparent sticker). */
+export async function segmentPet(dataUrl: string): Promise<string | null> {
+  try {
+    const segmenter = await getSegmenter();
+    const output = await segmenter(dataUrl);
+    const raw = Array.isArray(output) ? output[0] : output;
+    if (!raw) return null;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = raw.width;
+    canvas.height = raw.height;
+    const ctx = canvas.getContext("2d")!;
+    if (typeof raw.toCanvas === "function") {
+      ctx.drawImage(raw.toCanvas(), 0, 0);
+    } else {
+      const pixels = ctx.createImageData(raw.width, raw.height);
+      pixels.data.set(raw.data);
+      ctx.putImageData(pixels, 0, 0);
+    }
+    const trimmed = trimTransparent(canvas);
+    const webp = trimmed.toDataURL("image/webp", 0.82);
+    return webp.startsWith("data:image/webp") ? webp : trimmed.toDataURL("image/png");
+  } catch (err) {
+    console.warn("[petcatch] cutout failed, falling back to full photo:", err);
+    return null;
+  }
+}
+
+/**
+ * Stage 3: 384-d L2-normalized DINOv2 signature. Feed it the CUTOUT so the
+ * background can't pollute the identity (falls back to the full frame).
+ * The transparent cutout is composited onto neutral gray first — DINOv2
+ * has no alpha channel, and a consistent backdrop keeps signatures stable.
+ */
+export async function embedSignature(imageDataUrl: string): Promise<number[]> {
+  const extractor = await getExtractor();
+  const input = imageDataUrl.startsWith("data:image/webp") || imageDataUrl.startsWith("data:image/png")
+    ? await flattenOnGray(imageDataUrl)
+    : imageDataUrl;
+  const output = await extractor(input);
+  const dim: number = output.dims[2];
+  const cls = Array.from(output.data.slice(0, dim) as Float32Array);
+  const norm = Math.hypot(...cls) || 1;
+  return cls.map((v) => v / norm);
+}
+
+async function flattenOnGray(dataUrl: string): Promise<string> {
+  const img = new Image();
+  await new Promise<void>((res, rej) => {
+    img.onload = () => res();
+    img.onerror = () => rej(new Error("flatten load failed"));
+    img.src = dataUrl;
+  });
+  const c = document.createElement("canvas");
+  c.width = img.naturalWidth;
+  c.height = img.naturalHeight;
+  const ctx = c.getContext("2d")!;
+  ctx.fillStyle = "#808080";
+  ctx.fillRect(0, 0, c.width, c.height);
+  ctx.drawImage(img, 0, 0);
+  return c.toDataURL("image/jpeg", 0.9);
+}
+
+function trimTransparent(canvas: HTMLCanvasElement): HTMLCanvasElement {
+  const ctx = canvas.getContext("2d")!;
+  const { data, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  let minX = width, minY = height, maxX = 0, maxY = 0;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (data[(y * width + x) * 4 + 3] > 16) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+  if (maxX <= minX || maxY <= minY) return canvas;
+  const pad = 6;
+  minX = Math.max(0, minX - pad); minY = Math.max(0, minY - pad);
+  maxX = Math.min(width - 1, maxX + pad); maxY = Math.min(height - 1, maxY + pad);
+  const out = document.createElement("canvas");
+  out.width = maxX - minX + 1;
+  out.height = maxY - minY + 1;
+  out.getContext("2d")!.drawImage(canvas, minX, minY, out.width, out.height, 0, 0, out.width, out.height);
+  return out;
+}
+
+/** Cosine similarity (vectors are already L2-normalized). */
 export function cosineSimilarity(a: number[], b: number[]): number {
   if (a.length !== b.length || a.length === 0) return 0;
   let dot = 0;
   for (let i = 0; i < a.length; i++) dot += a[i] * b[i];
-  return dot; // vectors are already L2-normalized
+  return dot;
 }

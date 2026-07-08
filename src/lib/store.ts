@@ -22,8 +22,10 @@ export interface PetCard {
   level: number;
   candy: number;
   stats: { chonkiness: number; friendliness: number; energy: number };
-  /** 768-d L2-normalized embedding — kept locally for offline uniqueness checks */
+  /** L2-normalized DINOv2 embedding — kept locally for offline uniqueness checks */
   signature?: number[];
+  /** Extra signatures from confirmed revisits (up to 3 viewing angles) */
+  signatures?: number[][];
   /** Transparent sticker cutout (on-device background removal) */
   cutoutUrl?: string | null;
   createdAt: string;
@@ -39,6 +41,19 @@ export type CaptureOutcomeState =
   | { outcome: "new_discovery"; card: PetCard; xp: number }
   | { outcome: "revisit"; cardId: string; level: number; candy: number; xp: number }
   | null;
+
+/**
+ * A capture in flight. Created the moment classification passes (fast), so
+ * the catch minigame starts immediately; the cutout and the uniqueness
+ * verdict stream in while the player plays.
+ */
+export interface CaptureFlow {
+  photoUrl: string;
+  species: Species;
+  cutoutUrl: string | null;
+  outcome: CaptureOutcomeState;
+  failed?: boolean;
+}
 
 /** A champion drawn for a Steal War (own card or the rival's snapshot). */
 export interface BattleChampion {
@@ -118,9 +133,10 @@ interface AppState {
   adCoinsDay: string | null;
   setAdCoinsDay: (day: string) => void;
 
-  // Result of the latest capture
-  lastCaptureOutcome: CaptureOutcomeState;
-  setLastCaptureOutcome: (outcome: CaptureOutcomeState) => void;
+  // The capture currently in flight / being revealed
+  captureFlow: CaptureFlow | null;
+  setCaptureFlow: (flow: CaptureFlow | null) => void;
+  patchCaptureFlow: (patch: Partial<CaptureFlow>) => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -188,8 +204,10 @@ export const useAppStore = create<AppState>()(
       adCoinsDay: null,
       setAdCoinsDay: (adCoinsDay) => set({ adCoinsDay }),
 
-      lastCaptureOutcome: null,
-      setLastCaptureOutcome: (lastCaptureOutcome) => set({ lastCaptureOutcome }),
+      captureFlow: null,
+      setCaptureFlow: (captureFlow) => set({ captureFlow }),
+      patchCaptureFlow: (patch) =>
+        set((s) => (s.captureFlow ? { captureFlow: { ...s.captureFlow, ...patch } } : {})),
     }),
     {
       name: "petcatch-store",

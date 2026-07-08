@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { MAX_CANS } from "@/lib/economy";
+import { preloadModels, onModelProgress } from "@/lib/vision";
 
 const SLIDES = [
   {
@@ -41,8 +42,17 @@ const SLIDES = [
 export default function Onboarding() {
   const setHasOnboarded = useAppStore((s) => s.setHasOnboarded);
   const [i, setI] = useState(0);
+  const [aiProgress, setAiProgress] = useState(0);
   const slide = SLIDES[i];
   const last = i === SLIDES.length - 1;
+
+  // The carousel doubles as the AI download screen — models arrive while
+  // the player reads, so the first scan starts instantly
+  useEffect(() => {
+    onModelProgress(setAiProgress);
+    preloadModels();
+    return () => onModelProgress(null);
+  }, []);
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center overflow-y-auto bg-ink/70 p-5 backdrop-blur-sm">
@@ -70,7 +80,17 @@ export default function Onboarding() {
           </ul>
         </div>
 
-        <div className="flex items-center justify-between gap-3 p-5 pt-0">
+        <div className="px-6 pb-1">
+          <div className="mb-1 flex justify-between text-[10px] font-extrabold text-ink/40">
+            <span>🧠 Preparing on-device AI…</span>
+            <span>{Math.min(aiProgress, 100)}%</span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-white">
+            <div className="h-full rounded-full bg-grass transition-all" style={{ width: `${Math.min(aiProgress, 100)}%` }} />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-3 p-5 pt-3">
           <button
             type="button"
             onClick={() => setHasOnboarded(true)}

@@ -11,7 +11,15 @@ function awardCatchEconomy(isNew: boolean) {
   store.registerCatch(todayKey());
 }
 
-const SIMILARITY_THRESHOLD = 0.95;
+/**
+ * Re-identification threshold for DINOv2 cutout embeddings. Benchmarks:
+ * same dog across views scores 0.79–0.94, different species near 0 —
+ * so 0.80 recognizes revisits reliably with a wide safety margin.
+ */
+const SIMILARITY_THRESHOLD = 0.8;
+const MAX_SIGNATURES_PER_CARD = 3;
+/** A new view this dissimilar from stored ones is worth remembering. */
+const NEW_VIEW_MAX_SIM = 0.93;
 
 export type CaptureOutcome =
   | { outcome: "new_discovery"; card: PetCard; xp: number }
@@ -126,15 +134,21 @@ function submitLocally(
   payload: CapturePayload,
   store: ReturnType<typeof useAppStore.getState>
 ): CaptureOutcome {
-  // Same cosine-similarity uniqueness rule as match_pet_signature(), run on-device
+  // Species-gated re-identification: best cosine over ALL stored viewing
+  // angles of each same-species card (multi-signature matching)
   let bestId: string | null = null;
   let bestSim = 0;
   for (const card of store.collection) {
-    if (!card.signature) continue;
-    const sim = cosineSimilarity(payload.signature, card.signature);
-    if (sim > bestSim) {
-      bestSim = sim;
-      bestId = card.id;
+    if (card.species !== payload.species) continue;
+    const views = [card.signature, ...(card.signatures ?? [])].filter(
+      (s): s is number[] => Boolean(s) && s!.length === payload.signature.length
+    );
+    for (const view of views) {
+      const sim = cosineSimilarity(payload.signature, view);
+      if (sim > bestSim) {
+        bestSim = sim;
+        bestId = card.id;
+      }
     }
   }
 
@@ -142,7 +156,13 @@ function submitLocally(
     const existing = store.collection.find((c) => c.id === bestId)!;
     const level = existing.level + 1;
     const candy = existing.candy + 3;
-    store.updateCard(bestId, { level, candy });
+    // Remember this viewing angle if it adds new information
+    const views = existing.signatures ?? [];
+    const signatures =
+      bestSim < NEW_VIEW_MAX_SIM && views.length < MAX_SIGNATURES_PER_CARD
+        ? [...views, payload.signature]
+        : views;
+    store.updateCard(bestId, { level, candy, signatures });
     store.addXp(XP_FOR_REVISIT);
     awardCatchEconomy(false);
     return { outcome: "revisit", cardId: bestId, level, candy, xp: XP_FOR_REVISIT };
