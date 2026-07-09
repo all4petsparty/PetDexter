@@ -33,7 +33,7 @@ export default function Welcome() {
   async function handleGoogle() {
     if (!requireConsent()) return;
     setBusy(true);
-    const { error } = await signInWithGoogle();
+    const { error, popup } = await signInWithGoogle();
     if (error) {
       setMessage(
         error.includes("not enabled") || error.includes("provider")
@@ -41,8 +41,15 @@ export default function Welcome() {
           : error
       );
       setBusy(false);
+      return;
     }
-    // on success the browser redirects to Google
+    if (popup) {
+      // installed-app flow: sign-in completes in the popup and syncs back
+      // here automatically; this screen unmounts the moment it lands
+      setMessage("Finish signing in with Google in the window that opened… 🔐");
+      setBusy(false);
+    }
+    // otherwise the browser is redirecting to Google
   }
 
   async function handleEmail() {

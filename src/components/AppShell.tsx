@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAppStore } from "@/lib/store";
-import { initAuth } from "@/lib/auth";
+import { initAuth, handleAuthPopupReturn } from "@/lib/auth";
 import BottomNav from "@/components/BottomNav";
 import CardReveal from "@/components/CardReveal";
 import BattleArena from "@/components/BattleArena";
@@ -32,6 +32,7 @@ export default function AppShell() {
   // mismatch), then restore any Supabase session
   useEffect(() => {
     useAppStore.persist.rehydrate();
+    handleAuthPopupReturn(); // OAuth popup closes itself after storing the session
     initAuth().finally(() => setReady(true));
   }, []);
 
