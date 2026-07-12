@@ -71,11 +71,11 @@ async function makePipeline(task: string, model: string, extra: Record<string, u
 }
 
 async function getClassifier() {
-  classifierPromise ??= makePipeline("image-classification", "Xenova/vit-base-patch16-224");
+  classifierPromise ??= makePipeline("image-classification", "Xenova/vit-base-patch16-224", {}, true);
   return classifierPromise;
 }
 async function getExtractor() {
-  extractorPromise ??= makePipeline("image-feature-extraction", "Xenova/dinov2-small");
+  extractorPromise ??= makePipeline("image-feature-extraction", "Xenova/dinov2-small", {}, true);
   return extractorPromise;
 }
 async function getSegmenter() {
@@ -185,7 +185,7 @@ export async function classifyFrame(dataUrl: string): Promise<ClassifyResult> {
 
   if (spoofScore > 0.3 && spoofScore > confidence)
     return { ok: false, reason: "screen_detected", species, breed, confidence };
-  if (confidence < 0.15)
+  if (confidence < 0.10)
     return { ok: false, reason: "no_animal", species, breed, confidence };
   return { ok: true, species, breed, confidence };
 }
