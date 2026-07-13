@@ -62,7 +62,7 @@ export default function SettingsSheet({ onClose }: { onClose: () => void }) {
           <Link href="/legal" className={row} onClick={onClose}>
             ⚖️ Legal — Terms &amp; Privacy <span className="ml-auto text-ink/30">›</span>
           </Link>
-          <a href="mailto:all4petspawty@gmail.com?subject=PetCatch%20feedback" className={row}>
+          <a href="mailto:all4petspawty@gmail.com?subject=PetDexter%20feedback" className={row}>
             💬 Feedback &amp; support <span className="ml-auto text-ink/30">›</span>
           </a>
         </div>
@@ -117,7 +117,7 @@ export default function SettingsSheet({ onClose }: { onClose: () => void }) {
         {note && (
           <p className="animate-pop-in mt-4 rounded-2xl bg-sunny/40 px-4 py-3 text-center text-sm font-bold">{note}</p>
         )}
-        <p className="mt-6 text-center text-xs text-ink/30">PetCatch by All4Pets · Pasig City, PH</p>
+        <p className="mt-6 text-center text-xs text-ink/30">PetDexter by All4Pets · Pasig City, PH</p>
       </div>
     </div>
     </Portal>

@@ -7,7 +7,7 @@ export default function LegalLayout({ children }: { children: React.ReactNode })
         href="/"
         className="mb-4 inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 font-bold shadow-md"
       >
-        ← Back to PetCatch
+        ← Back to PetDexter
       </Link>
       <article className="prose-sm rounded-card bg-white p-6 shadow-md [&_h1]:text-2xl [&_h1]:font-extrabold [&_h2]:mt-5 [&_h2]:text-lg [&_h2]:font-extrabold [&_li]:mt-1.5 [&_p]:mt-2 [&_ul]:list-disc [&_ul]:pl-5">
         {children}

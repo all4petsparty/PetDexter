@@ -1,4 +1,4 @@
-# PetCatch 🐾
+# PetDexter 🐾
 
 A mobile-first PWA pet collection game: scan real-world pets with on-device AI, mint playful digital trading cards, and check in at pet-friendly venues.
 

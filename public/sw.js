@@ -1,6 +1,6 @@
-/* PetCatch service worker — app-shell cache for installability + offline shell */
-const CACHE = "petcatch-shell-v1";
-const SHELL = ["/", "/manifest.webmanifest", "/icons/icon.svg"];
+/* PetDexter service worker — app-shell cache for installability + offline shell */
+const CACHE = "petdexter-shell-v2";
+const SHELL = ["/", "/manifest.webmanifest", "/icons/icon-192.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)));

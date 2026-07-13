@@ -41,7 +41,8 @@ export default function AppShell() {
   if (!ready) {
     return (
       <div className="flex min-h-dvh items-center justify-center bg-cream">
-        <span className="animate-bob text-6xl">🐾</span>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/icons/icon-192.png" alt="PetDexter" className="animate-bob h-24 w-24 rounded-[24%] shadow-lg" />
       </div>
     );
   }

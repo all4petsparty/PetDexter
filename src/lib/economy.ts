@@ -73,7 +73,7 @@ export function formatDuration(ms: number): string {
 }
 
 // ---------------------------------------------------------------------------
-// Achievements (CatchCat-style milestones, PetCatch rewards)
+// Achievements (CatchCat-style milestones, PetDexter rewards)
 // ---------------------------------------------------------------------------
 
 export interface Achievement {

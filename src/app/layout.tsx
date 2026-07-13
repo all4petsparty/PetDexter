@@ -17,14 +17,18 @@ const caveat = Caveat({
 });
 
 export const metadata: Metadata = {
-  title: "PetCatch — Catch 'em all, for real!",
+  title: "PetDexter — Catch 'em all, for real!",
   description:
     "Scan real-world pets, collect unique digital trading cards, and check in at pet-friendly spots near you.",
   manifest: "/manifest.webmanifest",
+  icons: {
+    icon: "/icons/icon-192.png",
+    apple: "/icons/apple-touch-icon.png",
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "PetCatch",
+    title: "PetDexter",
   },
 };
 

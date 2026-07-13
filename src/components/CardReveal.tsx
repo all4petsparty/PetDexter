@@ -5,7 +5,7 @@ import { useAppStore } from "@/lib/store";
 import { SPECIES_EMOJI } from "@/components/icons";
 
 const REJECT_TEXT: Record<string, string> = {
-  screen_detected: "That looks like a screen — PetCatch only counts real-life friends! 📺",
+  screen_detected: "That looks like a screen — PetDexter only counts real-life friends! 📺",
   no_animal: "No pet found in the shot — aim for a dog, cat, rabbit, or bird! 🔍",
   too_still: "Too still — find a live, wiggly friend! 🖼️",
   error: "The treat rolled away — try another toss! 😵",

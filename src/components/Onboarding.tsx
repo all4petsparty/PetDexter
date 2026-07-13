@@ -9,7 +9,7 @@ const SLIDES = [
   {
     title: "Spot real pets",
     emoji: "🐾",
-    body: "PetCatch is a real-world pet spotting game. Verify dogs, cats, rabbits, and birds you meet and turn sightings into collectible cards.",
+    body: "PetDexter is a real-world pet spotting game. Verify dogs, cats, rabbits, and birds you meet and turn sightings into collectible cards.",
     points: ["Find pets in the real world — parks, streets, cafés", "Each verified sighting becomes a sticker card", "Rarer breeds mint rarer cards"],
   },
   {

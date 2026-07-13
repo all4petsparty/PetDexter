@@ -74,10 +74,7 @@ export default function Welcome() {
       <div className="mx-auto flex min-h-dvh max-w-lg flex-col items-center justify-center gap-5 p-6">
         <div className="flex flex-col items-center gap-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/icons/icon.svg" alt="PetCatch" className="h-24 w-24 rounded-[28%] shadow-lg" />
-          <h1 className="text-4xl font-extrabold tracking-tight">
-            PET<span className="text-tangerine">CATCH</span>
-          </h1>
+          <img src="/petdexter-logo.png" alt="PetDexter" className="w-56 max-w-[70%] drop-shadow-lg" />
           <p className="font-script text-2xl text-ink/60">Spot real pets. Build your PetDex.</p>
         </div>
 

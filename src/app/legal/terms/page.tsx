@@ -1,4 +1,4 @@
-export const metadata = { title: "Terms & Conditions — PetCatch" };
+export const metadata = { title: "Terms & Conditions — PetDexter" };
 
 export default function TermsPage() {
   return (
@@ -8,7 +8,7 @@ export default function TermsPage() {
 
       <h2>1. Scope and Acceptance</h2>
       <p>
-        These Terms of Service apply to the use of the <b>PetCatch</b> web platform and
+        These Terms of Service apply to the use of the <b>PetDexter</b> web platform and
         Progressive Web Application (PWA), including all connected location-based features,
         card-generation engines, and interactive modules. The App is developed and operated by{" "}
         <b>All4Pets</b>, with a registered address in <b>Pasig City, Philippines</b>. By accessing,
@@ -24,7 +24,7 @@ export default function TermsPage() {
       </ul>
 
       <h2>3. Description of Services</h2>
-      <p>PetCatch is a gamified, real-world multi-pet collection ecosystem that enables users to:</p>
+      <p>PetDexter is a gamified, real-world multi-pet collection ecosystem that enables users to:</p>
       <ul>
         <li>Scan and capture real-life domestic animals (such as dogs, cats, rabbits, and birds) using a mobile web camera stream.</li>
         <li>Generate unique, gamified digital trading cards backed by on-device verification layers.</li>

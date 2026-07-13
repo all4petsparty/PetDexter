@@ -1,4 +1,4 @@
-export const metadata = { title: "Privacy Policy — PetCatch" };
+export const metadata = { title: "Privacy Policy — PetDexter" };
 
 export default function PrivacyPage() {
   return (
@@ -18,7 +18,7 @@ export default function PrivacyPage() {
       </ul>
 
       <h2>2. Data We Collect and Process</h2>
-      <p>To properly run the PetCatch mobile ecosystem, we collect several categories of information:</p>
+      <p>To properly run the PetDexter mobile ecosystem, we collect several categories of information:</p>
       <ul>
         <li><b>Registration Data:</b> Name, email address, and profile image shared when establishing an account through Google or Apple Sign-In authentication parameters.</li>
         <li><b>Gameplay and Collection Records:</b> Dynamic statistics, pet species/breed classifications, user-assigned custom names, and visual cards created over the course of application interaction.</li>

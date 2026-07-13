@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-export const metadata = { title: "Legal — PetCatch" };
+export const metadata = { title: "Legal — PetDexter" };
 
 export default function LegalHub() {
   return (
