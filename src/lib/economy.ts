@@ -55,6 +55,18 @@ export function grantCans(n: number) {
   store.setCans({ count: count + n, lastRefillAt: store.cans.lastRefillAt });
 }
 
+/** A snack can costs this many coins at the counter. */
+export const CAN_COIN_COST = 20;
+
+/** Spend coins for one can. Returns false if the trainer can't afford it. */
+export function buyCanWithCoins(): boolean {
+  const store = useAppStore.getState();
+  if (store.coins < CAN_COIN_COST) return false;
+  store.addCoins(-CAN_COIN_COST);
+  grantCans(1);
+  return true;
+}
+
 export function formatDuration(ms: number): string {
   const m = Math.ceil(ms / 60000);
   return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`;
