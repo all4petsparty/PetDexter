@@ -33,12 +33,14 @@ function Sparkles({ count = 10 }: { count?: number }) {
 }
 
 /**
- * Fast capture reveal: ~2s brew → collector card with the photo and name.
- * The outcome line is shown only once background processing resolves the
- * REAL result (new meeting vs. reunion vs. already-met-today) — never
- * guessed upfront. Once a meeting resolves as genuinely new, the name
- * prompt (spec §9) appears right here so learning the pet's real name is
- * part of the capture moment, not a follow-up chore in the PetDex.
+ * Fast capture reveal: ~2s brew → collector card with the photo, name
+ * prompt, and next-step actions — ALL available immediately, none of it
+ * gated behind the slow background AI pipeline (cutout, signature, match,
+ * Supabase sync). That pipeline still runs — see finalizeCapture — but it
+ * now resolves silently in the background; its result surfaces later as
+ * the "hatching" (blurred photo) state on the card in the PetDex, not as
+ * a blocker here. Naming right away means it's part of the capture
+ * moment, not a follow-up chore, and never waits on a network call.
  */
 export default function CardReveal() {
   const flow = useAppStore((s) => s.captureFlow);
@@ -86,8 +88,7 @@ export default function CardReveal() {
   }
 
   const card = flow.card!;
-  const r = flow.resolution;
-  const showNamePrompt = r?.kind === "new" && !card.nameConfirmed && !namePrompted;
+  const showNamePrompt = !card.nameConfirmed && !namePrompted;
 
   function saveName() {
     const trimmed = nameDraft.trim();
@@ -97,6 +98,16 @@ export default function CardReveal() {
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-ink/80 p-5 backdrop-blur-md">
+      <button
+        type="button"
+        onClick={dismiss}
+        aria-label="Close"
+        className="fixed right-4 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-lg font-extrabold text-ink shadow-lg"
+        style={{ top: "max(1rem, env(safe-area-inset-top))" }}
+      >
+        ✕
+      </button>
+
       <div className="animate-pop-in w-full max-w-sm">
         {/* collector card: photo in frame, name below */}
         <div className="rounded-card bg-gradient-to-br from-sunny via-tangerine to-sunny-deep p-2 shadow-2xl">
@@ -144,31 +155,9 @@ export default function CardReveal() {
                 </>
               )}
 
-              {!r && (
-                <span className="mx-auto animate-pulse rounded-full bg-sunny/60 px-4 py-1 text-sm font-extrabold text-ink">
-                  Saving your encounter…
-                </span>
-              )}
-              {r?.kind === "new" && (
-                <span className="mx-auto rounded-full bg-sunny px-4 py-1 text-sm font-extrabold text-ink">
-                  ✨ New pet met! Paw Points +{r.points}
-                </span>
-              )}
-              {r?.kind === "reunion" && (
-                <span className="mx-auto rounded-full bg-sky/40 px-4 py-1 text-sm font-extrabold text-ink">
-                  🤝 Reunion! Met {r.encounterCount}× · Paw Points +{r.points}
-                </span>
-              )}
-              {r?.kind === "same_day" && (
-                <span className="mx-auto rounded-full bg-ink/10 px-4 py-1 text-center text-sm font-extrabold text-ink/60">
-                  👋 You already met this pet today!
-                </span>
-              )}
-              {r?.kind === "error" && (
-                <span className="mx-auto rounded-full bg-ink/10 px-4 py-1 text-sm font-extrabold text-ink/60">
-                  Saved! (couldn't confirm the match, but your card is safe)
-                </span>
-              )}
+              <p className="rounded-2xl bg-white/70 px-3 py-2 text-xs font-bold text-ink/50">
+                🥚 Saved! They're hatching in the background — check your PetDex in a bit.
+              </p>
             </div>
           </div>
         </div>

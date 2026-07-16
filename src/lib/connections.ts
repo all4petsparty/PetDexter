@@ -182,3 +182,23 @@ export async function connectWithOwner(ownerId: string): Promise<ConnectResult> 
 
   return { ownerName, imported, skipped };
 }
+
+/**
+ * Delete a card locally, plus a best-effort remote cleanup if it was ever
+ * synced (My Pet or Met pet with a remoteId). RLS (migration 0007) already
+ * restricts pet_profiles deletes to the owner; pet_images/encounters
+ * cascade via their FK (see migration 0010 for the encounters cascade —
+ * it was missing that until a delete would otherwise be blocked).
+ * Local removal always happens even if signed out or the remote call fails.
+ */
+export async function deletePet(card: PetCard): Promise<void> {
+  useAppStore.getState().removeCard(card.id);
+  const authUser = useAppStore.getState().authUser;
+  if (!authUser || !card.remoteId) return;
+  try {
+    const { getSupabase } = await import("@/lib/supabase");
+    await getSupabase().from("pet_profiles").delete().eq("id", card.remoteId);
+  } catch (err) {
+    console.warn("[petdexter] couldn't delete pet from Supabase (removed locally regardless):", err);
+  }
+}

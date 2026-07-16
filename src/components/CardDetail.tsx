@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { useAppStore, type PetCard } from "@/lib/store";
 import { SPECIES_EMOJI } from "@/components/icons";
 import { familiarityFor } from "@/lib/familiarity";
+import { deletePet } from "@/lib/connections";
 
 const TRAIT_OPTIONS = [
   "Playful", "Shy", "Cuddly", "Zoomy", "Sleepy", "Chatty", "Gentle", "Curious", "Food-motivated",
@@ -51,6 +52,7 @@ export default function CardDetail({ card: cardProp, onClose }: { card: PetCard;
   const updateCard = useAppStore((s) => s.updateCard);
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(card.customName);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const processing = card.hatched === false;
   const bd = card.backdrop ?? (card.id.charCodeAt(0) + card.id.charCodeAt(3)) % 4;
@@ -70,6 +72,11 @@ export default function CardDetail({ card: cardProp, onClose }: { card: PetCard;
     const has = card.traits.includes(trait);
     const next = has ? card.traits.filter((t) => t !== trait) : [...card.traits, trait].slice(0, 3);
     updateCard(card.id, { traits: next });
+  }
+
+  function handleDelete() {
+    deletePet(card);
+    onClose();
   }
 
   // Portal to <body>: the active view <section> keeps a `transform` from the
@@ -94,7 +101,7 @@ export default function CardDetail({ card: cardProp, onClose }: { card: PetCard;
           <div className={`rounded-card bg-gradient-to-br p-2 shadow-2xl ${processing ? "from-sunny to-sunny-deep" : "from-ink/20 to-ink/5"}`}>
             <div className="overflow-hidden rounded-[1.4rem] bg-white">
               {/* Art area — height-capped so the whole card fits one screen */}
-              <div className={`relative flex h-[36vh] max-h-80 min-h-52 items-end justify-center overflow-hidden ${processing ? "bg-sunny/25" : `hatch-bg-${bd}`}`}>
+              <div className={`relative flex h-[36vh] max-h-80 min-h-52 items-end justify-center overflow-hidden ${processing ? "bg-ink/10" : `hatch-bg-${bd}`}`}>
                 <Sparkles count={processing ? 0 : 12} />
                 <span className="absolute left-3 top-3 rounded-full bg-white/90 px-3 py-1 text-2xl shadow">
                   {SPECIES_EMOJI[card.species]}
@@ -117,18 +124,17 @@ export default function CardDetail({ card: cardProp, onClose }: { card: PetCard;
                     🔗 {card.connectedFrom}'s pet
                   </span>
                 )}
-                {processing ? (
-                  <div className="flex h-full w-full animate-pulse flex-col items-center justify-center gap-2">
-                    <span className="animate-bob text-7xl">🐾</span>
-                    <span className="text-sm font-extrabold text-ink/50">Still saving your photo…</span>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={card.cutoutUrl ?? card.imageUrl}
+                  alt={card.customName}
+                  className={`${card.cutoutUrl ? "sticker max-h-[92%] max-w-[88%] object-contain" : "h-full w-full object-cover"} ${processing ? "scale-110 blur-lg" : ""}`}
+                />
+                {processing && (
+                  <div className="absolute inset-0 flex animate-pulse flex-col items-center justify-center gap-2 bg-ink/25">
+                    <span className="animate-bob text-6xl">🥚</span>
+                    <span className="rounded-full bg-white/90 px-3 py-1 text-sm font-extrabold text-ink/70">Still hatching…</span>
                   </div>
-                ) : (
-                  /* eslint-disable-next-line @next/next/no-img-element */
-                  <img
-                    src={card.cutoutUrl ?? card.imageUrl}
-                    alt={card.customName}
-                    className={card.cutoutUrl ? "sticker max-h-[92%] max-w-[88%] object-contain" : "h-full w-full object-cover"}
-                  />
                 )}
                 {card.venueName && (
                   <span className="absolute bottom-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-sunny px-3 py-1 text-[11px] font-extrabold text-ink shadow">
@@ -240,6 +246,24 @@ export default function CardDetail({ card: cardProp, onClose }: { card: PetCard;
           >
             Close ✕
           </button>
+
+          {confirmDelete ? (
+            <button
+              type="button"
+              onClick={handleDelete}
+              className="tappable mx-auto mt-3 block rounded-full bg-tangerine-deep px-8 py-3 font-extrabold text-white shadow-md"
+            >
+              ⚠️ Tap again to permanently delete {card.customName}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmDelete(true)}
+              className="tappable mx-auto mt-3 block rounded-full bg-white/70 px-8 py-2.5 text-sm font-bold text-tangerine-deep"
+            >
+              🗑️ Delete this card
+            </button>
+          )}
         </div>
       </div>
     </div>,

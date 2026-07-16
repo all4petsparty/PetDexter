@@ -44,19 +44,18 @@ function MiniCard({ card, index, onOpen }: { card: PetCard; index: number; onOpe
       style={{ transform: `rotate(${index % 2 === 0 ? -1.2 : 1.2}deg)` }}
     >
       <span className="block overflow-hidden rounded-xl bg-white">
-        <span className={`relative flex h-32 w-full items-end justify-center overflow-hidden ${processing ? "bg-sunny/25" : `hatch-bg-${bd}`}`}>
-          {processing ? (
-            <span className="flex h-full w-full animate-pulse flex-col items-center justify-center gap-1">
-              <span className="animate-bob text-5xl">🐾</span>
-              <span className="text-[10px] font-extrabold text-ink/50">Saving…</span>
+        <span className={`relative flex h-32 w-full items-end justify-center overflow-hidden ${processing ? "bg-ink/10" : `hatch-bg-${bd}`}`}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={card.cutoutUrl ?? card.imageUrl}
+            alt={card.customName}
+            className={`${card.cutoutUrl ? "sticker max-h-28 max-w-[90%] object-contain" : "h-32 w-full object-cover"} ${processing ? "scale-110 blur-md" : ""}`}
+          />
+          {processing && (
+            <span className="absolute inset-0 flex animate-pulse flex-col items-center justify-center gap-1 bg-ink/20">
+              <span className="animate-bob text-3xl">🥚</span>
+              <span className="rounded-full bg-white/90 px-2 py-0.5 text-[10px] font-extrabold text-ink/70">Hatching…</span>
             </span>
-          ) : (
-            /* eslint-disable-next-line @next/next/no-img-element */
-            <img
-              src={card.cutoutUrl ?? card.imageUrl}
-              alt={card.customName}
-              className={card.cutoutUrl ? "sticker max-h-28 max-w-[90%] object-contain" : "h-32 w-full object-cover"}
-            />
           )}
           <span className="absolute left-1.5 top-1.5 rounded-full bg-white/85 px-1.5 text-sm shadow">{SPECIES_EMOJI[card.species]}</span>
           {!card.owned && card.encounters.length > 1 && (
@@ -69,7 +68,7 @@ function MiniCard({ card, index, onOpen }: { card: PetCard; index: number; onOpe
           <span className="font-script block truncate text-2xl font-bold leading-tight text-ink">{card.customName}</span>
           <span className="flex items-center justify-between text-[9px] font-extrabold">
             <span className="uppercase tracking-wide text-ink/40">
-              {processing ? "saving" : (card.breed ?? SPECIES_LABEL[card.species].slice(0, -1))}
+              {processing ? "hatching" : (card.breed ?? SPECIES_LABEL[card.species].slice(0, -1))}
             </span>
             <span className="text-ink/35">#{String(card.serialNumber).padStart(6, "0")}</span>
           </span>
