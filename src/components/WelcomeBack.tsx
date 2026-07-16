@@ -2,25 +2,22 @@
 
 import { useEffect, useState } from "react";
 import { useAppStore } from "@/lib/store";
-import {
-  ACHIEVEMENTS, currentCans, claimAchievement, grantCans,
-  buyCanWithCoins, CAN_COIN_COST, MAX_CANS,
-} from "@/lib/economy";
+import { ACHIEVEMENTS, claimAchievement, grantSnacks, canClaimSnackAdToday, claimSnackAdToday, metCount } from "@/lib/economy";
 import Portal from "@/components/Portal";
 import RewardedAd from "@/components/RewardedAd";
 
-/** Cans at or below this count trigger the restock nudge. */
-const LOW_CANS = 1;
+/** Snacks at or below this count trigger the restock nudge. */
+const LOW_SNACKS = 1;
 const SESSION_KEY = "pc_welcomed_session";
 
 /**
  * "Welcome back" nudge shown once per app open (fresh session): surfaces the
- * next unfinished mission and, when snack cans or coins are low, prompts a
- * restock via rewarded video or coins. Renders after the entry gates.
+ * next unfinished mission and, when Discovery Snacks are low, prompts a
+ * restock via rewarded video. Renders after the entry gates.
  */
 export default function WelcomeBack() {
   const collection = useAppStore((s) => s.collection);
-  const coins = useAppStore((s) => s.coins);
+  const snacks = useAppStore((s) => s.snacks);
   const claimed = useAppStore((s) => s.claimedAchievements);
   const setActiveView = useAppStore((s) => s.setActiveView);
   const authUser = useAppStore((s) => s.authUser);
@@ -50,20 +47,20 @@ export default function WelcomeBack() {
 
   if (!open) return null;
 
-  const { count: cans, nextRefillMs } = currentCans();
-  const lowCans = cans <= LOW_CANS;
-  const canAfford = coins >= CAN_COIN_COST;
+  const lowSnacks = snacks <= LOW_SNACKS;
+  const adAvailable = canClaimSnackAdToday();
 
   // next unfinished mission = first unclaimed achievement
+  const met = metCount();
   const mission = ACHIEVEMENTS.find((a) => !claimed.includes(a.id));
-  const missionReached = mission ? collection.length >= mission.goal : false;
-  const missionProgress = mission ? Math.min(collection.length, mission.goal) : 0;
+  const missionReached = mission ? met >= mission.goal : false;
+  const missionProgress = mission ? Math.min(met, mission.goal) : 0;
 
   const close = () => setOpen(false);
 
-  function goCatch() {
+  function goMeet() {
     close();
-    setActiveView("capture");
+    setActiveView("meet");
   }
 
   function handleClaim() {
@@ -83,37 +80,25 @@ export default function WelcomeBack() {
         >
           <div className="text-center">
             <span className="text-5xl">🐾</span>
-            <h2 className="mt-1 text-2xl font-extrabold">Welcome back, trainer!</h2>
+            <h2 className="mt-1 text-2xl font-extrabold">Welcome back!</h2>
           </div>
 
-          {/* Low-cans / low-coins restock nudge (priority) */}
-          {lowCans && (
+          {/* Low-snacks restock nudge (priority) */}
+          {lowSnacks && (
             <div className="flex flex-col gap-3 rounded-2xl bg-tangerine/15 p-4">
               <p className="text-sm font-bold text-ink/80">
-                🥫 You&apos;re running low on snack cans (<b>{cans}/{MAX_CANS}</b>)!{" "}
-                {canAfford
-                  ? "Restock with a quick video or spend some coins."
-                  : "Watch a short video to restock and keep catching."}
-                {nextRefillMs != null && !canAfford && cans === 0 && " Free cans also refill over time."}
+                🍬 You&apos;re running low on Discovery Snacks (<b>{snacks}</b>)!{" "}
+                {adAvailable ? "Watch a short video to restock and keep meeting pets." : "More arrive with tomorrow's free daily grant."}
               </p>
-              <div className="flex gap-2">
+              {adAvailable && (
                 <button
                   type="button"
                   onClick={() => setShowAd(true)}
-                  className="tappable flex-1 rounded-full bg-tangerine px-4 py-3 text-sm font-extrabold text-white shadow-md"
+                  className="tappable rounded-full bg-tangerine px-4 py-3 text-sm font-extrabold text-white shadow-md"
                 >
                   🎬 Watch video
                 </button>
-                {canAfford && (
-                  <button
-                    type="button"
-                    onClick={() => { if (buyCanWithCoins()) setClaimNote("+1 can! 🥫"); }}
-                    className="tappable flex-1 rounded-full bg-sunny px-4 py-3 text-sm font-extrabold text-ink shadow-md"
-                  >
-                    Buy 1 · {CAN_COIN_COST}🪙
-                  </button>
-                )}
-              </div>
+              )}
             </div>
           )}
 
@@ -137,15 +122,15 @@ export default function WelcomeBack() {
               </div>
               <button
                 type="button"
-                onClick={missionReached ? handleClaim : goCatch}
+                onClick={missionReached ? handleClaim : goMeet}
                 className="tappable mt-1 rounded-full bg-grass px-4 py-3 font-extrabold text-white shadow-md"
               >
-                {missionReached ? `Claim ${mission.rewardLabel} 🎁` : "Start catching 📸"}
+                {missionReached ? `Claim ${mission.rewardLabel} 🎁` : "Start meeting pets 📸"}
               </button>
             </div>
           ) : (
             <div className="rounded-2xl bg-grass/15 p-4 text-center font-bold text-grass-deep">
-              🌟 All missions complete — you&apos;re a legend! Go catch more friends.
+              🌟 All missions complete — you&apos;re a legend! Go meet more friends.
             </div>
           )}
 
@@ -161,8 +146,8 @@ export default function WelcomeBack() {
 
       {showAd && (
         <RewardedAd
-          rewardLabel="1 snack can"
-          onComplete={() => { grantCans(1); setClaimNote("+1 can! 🥫"); }}
+          rewardLabel="1 Discovery Snack"
+          onComplete={() => { grantSnacks(1); claimSnackAdToday(); setClaimNote("+1 snack! 🍬"); }}
           onClose={() => setShowAd(false)}
         />
       )}

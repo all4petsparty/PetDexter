@@ -3,10 +3,9 @@
 import { useEffect, useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { initAuth, handleAuthPopupReturn } from "@/lib/auth";
-import { grantStarterFoodIfNeeded } from "@/lib/food";
+import { grantDailySnackIfNeeded } from "@/lib/economy";
 import BottomNav from "@/components/BottomNav";
 import CardReveal from "@/components/CardReveal";
-import BattleArena from "@/components/BattleArena";
 import Welcome from "@/components/Welcome";
 import Onboarding from "@/components/Onboarding";
 import GuestImport from "@/components/GuestImport";
@@ -38,9 +37,9 @@ export default function AppShell() {
     initAuth().finally(() => setReady(true));
   }, []);
 
-  // Retroactive grant for players who onboarded before the Boost Store shipped
+  // The daily free Discovery Snack grant, checked once the app is interactive
   useEffect(() => {
-    if (ready && hasOnboarded) grantStarterFoodIfNeeded();
+    if (ready && hasOnboarded) grantDailySnackIfNeeded();
   }, [ready, hasOnboarded]);
 
   // Gate order: consent+sign-in → onboarding carousel → the game
@@ -56,11 +55,11 @@ export default function AppShell() {
   if (!hasOnboarded) return <Onboarding />;
 
   const views = [
-    { key: "map", node: <MapView /> },
-    { key: "collection", node: <CollectionView /> },
-    { key: "capture", node: <CaptureView /> },
-    { key: "leaderboards", node: <LeaderboardsView /> },
-    { key: "profile", node: <ProfileView /> },
+    { key: "discover", node: <MapView /> },
+    { key: "petdex", node: <CollectionView /> },
+    { key: "meet", node: <CaptureView /> },
+    { key: "play", node: <LeaderboardsView /> },
+    { key: "me", node: <ProfileView /> },
   ] as const;
 
   return (
@@ -78,7 +77,6 @@ export default function AppShell() {
       </main>
       <BottomNav />
       <CardReveal />
-      <BattleArena />
       <GuestImport />
       <WelcomeBack />
     </div>

@@ -4,14 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { preloadModels, grabFrame, classifyFrame, imageToDataUrl } from "@/lib/vision";
 import { startCapture, finalizeCapture } from "@/lib/capture";
-import { startDemoBattle } from "@/lib/battle";
-import { currentCans, spendCan, formatDuration, grantCans, MAX_CANS } from "@/lib/economy";
+import { spendSnack, grantSnacks } from "@/lib/economy";
 import RewardedAd from "@/components/RewardedAd";
 
 const REJECT_MESSAGES: Record<string, string> = {
   screen_detected: "That looks like a screen! 📺 PetDexter only counts real-life friends.",
   no_animal: "No pet in the shot! 🔍 Aim the treat at a dog, cat, rabbit, or bird.",
-  no_cans: "Out of snack cans! 🥫 Wait for a refill or watch an ad for a bonus can.",
+  no_snacks: "Out of Discovery Snacks! 🍬 Watch an ad for a bonus snack, or wait for tomorrow's free grant.",
   error: "The treat missed! 😵 Give it another toss.",
 };
 
@@ -25,9 +24,11 @@ const DEMO_PETS = [
 const DEMO_CENTER = { lat: 14.5995, lng: 120.9842 };
 
 /**
- * Capture view — throw the treat at the pet on the live camera to snap it.
- * The card appears within ~5s; heavy AI (cutout, re-identification,
- * server sync) "hatches" in the background afterwards.
+ * Meet! view — throw a treat at the pet on the live camera to meet them.
+ * The card appears within ~5s; the cutout/re-identification finishes in
+ * the background afterwards. The thrown item is a Discovery Snack — a
+ * generic treat today, and (from Phase 6 on) whichever brand-associated
+ * treat the player has selected/owns.
  */
 export default function CaptureView() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -36,20 +37,17 @@ export default function CaptureView() {
   const checkedInVenue = useAppStore((s) => s.checkedInVenue);
   const setCaptureFlow = useAppStore((s) => s.setCaptureFlow);
   const patchCaptureFlow = useAppStore((s) => s.patchCaptureFlow);
-  const collection = useAppStore((s) => s.collection);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState<string | null>(null);
   const [showAd, setShowAd] = useState(false);
-  const cansState = useAppStore((s) => s.cans);
-  void cansState;
-  const { count: canCount, nextRefillMs } = currentCans();
+  const snacks = useAppStore((s) => s.snacks);
 
   // treat drag
   const [drag, setDrag] = useState<{ dx: number; dy: number } | null>(null);
   const dragOrigin = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
-    if (activeView !== "capture") return;
+    if (activeView !== "meet") return;
     let stream: MediaStream | undefined;
     preloadModels();
     (async () => {
@@ -60,7 +58,7 @@ export default function CaptureView() {
         if (videoRef.current) videoRef.current.srcObject = stream;
         setCameraError(null);
       } catch {
-        setCameraError("Camera unavailable — allow camera access to catch pets!");
+        setCameraError("Camera unavailable — allow camera access to meet pets!");
       }
     })();
     return () => stream?.getTracks().forEach((t) => t.stop());
@@ -68,8 +66,8 @@ export default function CaptureView() {
 
   /** The treat landed → snap the frame and run the 2s brew + fast card. */
   async function throwCapture(dataUrl: string) {
-    if (!spendCan()) {
-      setRejectReason("no_cans");
+    if (!spendSnack()) {
+      setRejectReason("no_snacks");
       return;
     }
     setRejectReason(null);
@@ -83,7 +81,7 @@ export default function CaptureView() {
       }
       const card = startCapture(dataUrl, scan.species, scan.breed);
       patchCaptureFlow({ status: "carded", card });
-      // hatch in the background — no waiting
+      // finish processing in the background — no waiting
       finalizeCapture(card);
     } catch {
       patchCaptureFlow({ status: "rejected", reason: "error" });
@@ -122,16 +120,13 @@ export default function CaptureView() {
     <div className="flex flex-col gap-4 p-4">
       <header className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-extrabold text-ink">Catch a Pet! 📸</h1>
-          <p className="text-ink/60">Throw the treat at a real animal to snap it.</p>
+          <h1 className="text-3xl font-extrabold text-ink">Meet a Pet! 📸</h1>
+          <p className="text-ink/60">Throw a treat at a real animal to meet them.</p>
         </div>
         <div className="flex flex-col items-end gap-1">
-          <button type="button" onClick={() => canCount < MAX_CANS && setShowAd(true)}
+          <button type="button" onClick={() => setShowAd(true)}
             className="tappable rounded-full bg-white px-3 py-1.5 text-sm font-extrabold shadow-md">
-            🥫 {canCount}/{MAX_CANS}
-            {nextRefillMs != null && (
-              <span className="ml-1 text-[10px] font-bold text-ink/40">+1 in {formatDuration(nextRefillMs)}</span>
-            )}
+            🍬 {snacks}
           </button>
           {checkedInVenue && (
             <span className="animate-pop-in rounded-full bg-grass px-3 py-1 text-xs font-bold text-white">
@@ -150,20 +145,20 @@ export default function CaptureView() {
         )}
         <div className="pointer-events-none absolute inset-8 rounded-[2rem] border-4 border-dashed border-sunny/80" />
         <div className="pointer-events-none absolute inset-x-0 bottom-3 text-center text-xs font-bold text-white/80">
-          🎯 Drag the treat onto the pet to catch it!
+          🎯 Drag the treat onto the pet to meet them!
         </div>
       </div>
 
       <button
         type="button"
-        aria-label="Treat — drag onto the camera to capture"
+        aria-label="Treat — drag onto the camera to meet a pet"
         onPointerDown={onTreatDown}
         onPointerMove={onTreatMove}
         onPointerUp={onTreatUp}
         className={`mx-auto flex h-20 w-20 touch-none items-center justify-center rounded-full border-8 border-sunny bg-tangerine text-4xl shadow-xl ${drag ? "" : "transition-transform"}`}
         style={drag ? { transform: `translate(${drag.dx}px, ${drag.dy}px) scale(1.2)` } : undefined}
       >
-        🥫
+        🍬
       </button>
 
       {rejectReason && (
@@ -187,18 +182,10 @@ export default function CaptureView() {
             </button>
           ))}
         </div>
-        <button
-          type="button"
-          disabled={collection.length === 0}
-          onClick={() => startDemoBattle(collection[Math.floor(Math.random() * collection.length)])}
-          className="tappable mt-3 w-full rounded-full bg-tangerine px-4 py-3 font-extrabold text-white shadow-md disabled:opacity-40"
-        >
-          ⚔️ Rival Steal War (demo)
-        </button>
       </section>
 
       {showAd && (
-        <RewardedAd rewardLabel="1 snack can" onComplete={() => grantCans(1)} onClose={() => setShowAd(false)} />
+        <RewardedAd rewardLabel="1 Discovery Snack" onComplete={() => grantSnacks(1)} onClose={() => setShowAd(false)} />
       )}
     </div>
   );

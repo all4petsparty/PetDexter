@@ -15,11 +15,11 @@ const TABS: {
   Icon: (props: { className?: string }) => React.ReactNode;
   activeColor: string;
 }[] = [
-  { key: "map", label: "Map", Icon: MapIcon, activeColor: "bg-sky text-white" },
-  { key: "collection", label: "PetDex", Icon: CollectionIcon, activeColor: "bg-grass text-white" },
-  { key: "capture", label: "Catch!", Icon: PawIcon, activeColor: "bg-tangerine text-white" },
-  { key: "leaderboards", label: "Ranks", Icon: TrophyIcon, activeColor: "bg-sunny text-ink" },
-  { key: "profile", label: "Me", Icon: ProfileIcon, activeColor: "bg-bubblegum text-white" },
+  { key: "discover", label: "Discover", Icon: MapIcon, activeColor: "bg-sky text-white" },
+  { key: "petdex", label: "PetDex", Icon: CollectionIcon, activeColor: "bg-grass text-white" },
+  { key: "meet", label: "Meet!", Icon: PawIcon, activeColor: "bg-tangerine text-white" },
+  { key: "play", label: "Play", Icon: TrophyIcon, activeColor: "bg-sunny text-ink" },
+  { key: "me", label: "Me", Icon: ProfileIcon, activeColor: "bg-bubblegum text-white" },
 ];
 
 export default function BottomNav() {
@@ -34,7 +34,7 @@ export default function BottomNav() {
       <ul className="flex items-end justify-around">
         {TABS.map(({ key, label, Icon, activeColor }) => {
           const isActive = activeView === key;
-          const isCapture = key === "capture";
+          const isMeet = key === "meet";
           return (
             <li key={key} className="flex-1">
               <button
@@ -42,19 +42,19 @@ export default function BottomNav() {
                 onClick={() => setActiveView(key)}
                 aria-current={isActive ? "page" : undefined}
                 className={`tappable mx-auto flex w-full flex-col items-center gap-0.5 py-1 font-semibold ${
-                  isCapture ? "-mt-7" : ""
+                  isMeet ? "-mt-7" : ""
                 }`}
               >
                 <span
                   className={`flex items-center justify-center rounded-2xl transition-all ${
-                    isCapture
+                    isMeet
                       ? `h-16 w-16 rounded-full border-4 border-white shadow-lg ${
                           isActive ? "bg-tangerine-deep" : "bg-tangerine"
                         } text-white`
                       : `h-9 w-14 ${isActive ? `${activeColor} animate-pop-in` : "text-ink/40"}`
                   }`}
                 >
-                  <Icon className={isCapture ? "h-8 w-8" : "h-6 w-6"} />
+                  <Icon className={isMeet ? "h-8 w-8" : "h-6 w-6"} />
                 </span>
                 <span
                   className={`text-[11px] ${

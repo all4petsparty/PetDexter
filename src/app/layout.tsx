@@ -17,9 +17,9 @@ const caveat = Caveat({
 });
 
 export const metadata: Metadata = {
-  title: "PetDexter — Catch 'em all, for real!",
+  title: "PetDexter — Meet pets. Remember them. Collect their stories.",
   description:
-    "Scan real-world pets, collect unique digital trading cards, and check in at pet-friendly spots near you.",
+    "Meet real-world pets, remember their names and places, connect with their people, and collect the story of every friend you make.",
   manifest: "/manifest.webmanifest",
   icons: {
     icon: "/icons/icon-192.png",

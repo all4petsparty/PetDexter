@@ -1,45 +1,65 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 
-/** The five bottom-nav views. */
-export type ViewKey = "map" | "collection" | "capture" | "leaderboards" | "profile";
+/** The five bottom-nav views (PetDexter V2 IA — see PetDexter_V2_Implementation_Plan.md §1). */
+export type ViewKey = "discover" | "petdex" | "meet" | "play" | "me";
 
 export type Species = "dog" | "cat" | "rabbit" | "bird" | "other";
 
-export type Rarity = "common" | "uncommon" | "rare" | "epic" | "legendary" | "mythic";
+/**
+ * One dated meeting with a pet — the local stand-in for the spec's
+ * `encounters` table (§34) until the real per-user Encounter/canonical-Pet
+ * schema is live on the backend (Phase 1 migration, not yet executed).
+ */
+export interface Encounter {
+  date: string; // ISO timestamp
+  lat: number | null;
+  lng: number | null;
+  venueName: string | null;
+}
 
+/**
+ * A pet card in the PetDex — either a pet the user owns ("My Pet", spec §4)
+ * or a pet they've met out in the world ("Pets Met"). Interim (Phase 1)
+ * shape: still one local record per pet rather than a full canonical
+ * Pet + Encounter split, but every meeting is now logged individually so
+ * Familiarity (§13) can be computed from real history instead of a counter.
+ * No field here implies a real pet has random worth, combat power, or can
+ * be lost through play.
+ */
 export interface PetCard {
   id: string;
   serialNumber: number;
+  /** The pet's name — either entered by the user or a suggested placeholder nickname. */
   customName: string;
+  /** True once a real name has been entered/confirmed (vs. an auto-suggested nickname). */
+  nameConfirmed?: boolean;
   species: Species;
   breed: string | null;
-  rarity: Rarity;
+  /** Up to 3 owner/community-entered traits (e.g. "Playful", "Shy"). */
+  traits: string[];
   imageUrl: string;
   lat: number | null;
   lng: number | null;
   venueName: string | null;
-  level: number;
-  candy: number;
-  stats: { chonkiness: number; friendliness: number; energy: number };
-  /** L2-normalized DINOv2 embedding — kept locally for offline uniqueness checks */
+  /** True for a pet the user registered as their own (spec §4 "My Pet"); false for a pet met out in the world. */
+  owned?: boolean;
+  /** Every dated meeting with this pet, oldest first. My Pets start with none. */
+  encounters: Encounter[];
+  /** Set when this card arrived via a Pet Family QR connection (spec §15) — the sharing parent's display name. */
+  connectedFrom?: string;
+  /** The remote pet_profiles.id, once an owned pet has been synced to Supabase (needed for QR sharing). */
+  remoteId?: string;
+  /** L2-normalized DINOv2 embedding — kept locally for offline recognition. */
   signature?: number[];
-  /** Extra signatures from confirmed revisits (up to 3 viewing angles) */
+  /** Extra signatures from confirmed reunions (up to 3 viewing angles). */
   signatures?: number[][];
-  /** Transparent sticker cutout (on-device background removal) */
+  /** Transparent sticker cutout (on-device background removal). */
   cutoutUrl?: string | null;
-  /** false while the card is still "hatching" (background processing) */
+  /** false while the card art is still being processed in the background. */
   hatched?: boolean;
-  /** index of the mystical backdrop revealed at hatch */
+  /** index of the card backdrop. */
   backdrop?: number;
-  /** how many times this pet has been fed a branded boost */
-  feedCount?: number;
-  /** brand of the most recent feed, shown as a "Powered by ___" badge */
-  lastFedBrand?: string | null;
-  /** Ascension tier (0-3). Raises each stat's cap and adds Power. */
-  starRank?: number;
-  /** ISO timestamp of the last REWARDED revisit (gates the leveling cooldown) */
-  lastRevisitAt?: string;
   createdAt: string;
 }
 
@@ -50,22 +70,21 @@ export interface CheckedInVenue {
 }
 
 /**
- * Reward outcome once the background hatch resolves — decoupled from the
- * instant card reveal so a revisit can never be mistaken for (or pay out
- * like) a brand-new discovery. `revisit_cooldown` means the pet WAS
- * recognized (no duplicate card was minted) but it's too soon since the
- * last rewarded revisit for this specific pet to pay out again.
+ * Reward outcome once background processing resolves — decoupled from the
+ * instant card reveal. Mirrors the spec's capture/identification result
+ * table: a same-day re-meeting is recognized but never mints extra unique
+ * value, and a reunion just appends to the same pet's history.
  */
 export type CaptureResolution =
-  | { kind: "new"; xp: number; coins: number; treats: number }
-  | { kind: "revisit"; xp: number; coins: number; level: number }
-  | { kind: "revisit_cooldown"; cooldownRemainingMs: number }
+  | { kind: "new"; points: number }
+  | { kind: "reunion"; points: number; encounterCount: number }
+  | { kind: "same_day" }
   | { kind: "error" };
 
 /**
  * A capture in flight. Created the moment classification passes (fast), so
- * the catch minigame starts immediately; the cutout, uniqueness verdict,
- * and reward resolution stream in while the player plays.
+ * the reveal starts immediately; the cutout and match/reward resolution
+ * stream in while the card is already on screen.
  */
 export interface CaptureFlow {
   photoUrl: string;
@@ -73,23 +92,6 @@ export interface CaptureFlow {
   reason?: string;
   card?: PetCard;
   resolution?: CaptureResolution;
-}
-
-/** A champion drawn for a Steal War (own card or the rival's snapshot). */
-export interface BattleChampion {
-  name: string;
-  species: Species;
-  rarity: Rarity;
-  power: number;
-  imageUrl: string | null;
-  cutoutUrl?: string | null;
-}
-
-/** An active Steal War over a contested pet. */
-export interface BattleState {
-  contested: PetCard;
-  rivalName: string;
-  venueName: string;
 }
 
 export interface AuthUser {
@@ -133,36 +135,23 @@ interface AppState {
   updateCard: (id: string, patch: Partial<PetCard>) => void;
   removeCard: (id: string) => void;
 
-  // ⚔️ Steal War in progress
-  activeBattle: BattleState | null;
-  setActiveBattle: (battle: BattleState | null) => void;
+  // Paw Points — single progression currency (persisted)
+  pawPoints: number;
+  addPawPoints: (amount: number) => void;
 
-  // Trainer XP (persisted)
-  userXp: number;
-  addXp: (amount: number) => void;
+  // 🍬 Discovery Snacks — capture cost, flat daily grant (persisted)
+  snacks: number;
+  setSnacks: (n: number) => void;
+  lastSnackGrantDay: string | null;
+  setLastSnackGrantDay: (day: string) => void;
+  adSnackDay: string | null;
+  setAdSnackDay: (day: string) => void;
 
-  // 🥫 Game economy (persisted)
-  cans: { count: number; lastRefillAt: number };
-  setCans: (cans: { count: number; lastRefillAt: number }) => void;
-  coins: number;
-  addCoins: (n: number) => void;
-  treats: number;
-  addTreats: (n: number) => void;
   streakDays: number;
   lastCatchDay: string | null;
   registerCatch: (dayKey: string) => void;
   claimedAchievements: string[];
   claimAchievement: (id: string) => void;
-  adCoinsDay: string | null;
-  setAdCoinsDay: (day: string) => void;
-
-  // 🍖 Brand food inventory (Boost Store) — account-level, persisted
-  foodInventory: Record<string, number>;
-  addFood: (foodId: string, n: number) => void;
-  foodAdClaims: Record<string, string>;
-  setFoodAdClaim: (foodId: string, day: string) => void;
-  starterFoodGranted: boolean;
-  setStarterFoodGranted: (v: boolean) => void;
 
   // The capture currently in flight / being revealed
   captureFlow: CaptureFlow | null;
@@ -173,7 +162,7 @@ interface AppState {
 export const useAppStore = create<AppState>()(
   persist(
     (set) => ({
-      activeView: "map",
+      activeView: "discover",
       setActiveView: (view) => set({ activeView: view }),
 
       consentAccepted: false,
@@ -204,18 +193,16 @@ export const useAppStore = create<AppState>()(
       removeCard: (id) =>
         set((s) => ({ collection: s.collection.filter((c) => c.id !== id) })),
 
-      activeBattle: null,
-      setActiveBattle: (activeBattle) => set({ activeBattle }),
+      pawPoints: 0,
+      addPawPoints: (amount) => set((s) => ({ pawPoints: Math.max(0, s.pawPoints + amount) })),
 
-      userXp: 0,
-      addXp: (amount) => set((s) => ({ userXp: s.userXp + amount })),
+      snacks: 0,
+      setSnacks: (n) => set({ snacks: Math.max(0, n) }),
+      lastSnackGrantDay: null,
+      setLastSnackGrantDay: (lastSnackGrantDay) => set({ lastSnackGrantDay }),
+      adSnackDay: null,
+      setAdSnackDay: (adSnackDay) => set({ adSnackDay }),
 
-      cans: { count: 4, lastRefillAt: Date.now() },
-      setCans: (cans) => set({ cans }),
-      coins: 0,
-      addCoins: (n) => set((s) => ({ coins: Math.max(0, s.coins + n) })),
-      treats: 0,
-      addTreats: (n) => set((s) => ({ treats: Math.max(0, s.treats + n) })),
       streakDays: 0,
       lastCatchDay: null,
       registerCatch: (dayKey) =>
@@ -234,22 +221,6 @@ export const useAppStore = create<AppState>()(
             ? {}
             : { claimedAchievements: [...s.claimedAchievements, id] }
         ),
-      adCoinsDay: null,
-      setAdCoinsDay: (adCoinsDay) => set({ adCoinsDay }),
-
-      foodInventory: {},
-      addFood: (foodId, n) =>
-        set((s) => ({
-          foodInventory: {
-            ...s.foodInventory,
-            [foodId]: Math.max(0, (s.foodInventory[foodId] ?? 0) + n),
-          },
-        })),
-      foodAdClaims: {},
-      setFoodAdClaim: (foodId, day) =>
-        set((s) => ({ foodAdClaims: { ...s.foodAdClaims, [foodId]: day } })),
-      starterFoodGranted: false,
-      setStarterFoodGranted: (starterFoodGranted) => set({ starterFoodGranted }),
 
       captureFlow: null,
       setCaptureFlow: (captureFlow) => set({ captureFlow }),
@@ -261,24 +232,46 @@ export const useAppStore = create<AppState>()(
       storage: createJSONStorage(() => localStorage),
       partialize: (s) => ({
         collection: s.collection,
-        userXp: s.userXp,
+        pawPoints: s.pawPoints,
         consentAccepted: s.consentAccepted,
         guestMode: s.guestMode,
         hasOnboarded: s.hasOnboarded,
         guestImportDoneFor: s.guestImportDoneFor,
-        cans: s.cans,
-        coins: s.coins,
-        treats: s.treats,
+        snacks: s.snacks,
+        lastSnackGrantDay: s.lastSnackGrantDay,
+        adSnackDay: s.adSnackDay,
         streakDays: s.streakDays,
         lastCatchDay: s.lastCatchDay,
         claimedAchievements: s.claimedAchievements,
-        adCoinsDay: s.adCoinsDay,
-        foodInventory: s.foodInventory,
-        foodAdClaims: s.foodAdClaims,
-        starterFoodGranted: s.starterFoodGranted,
       }),
       // Rehydrated manually in AppShell after mount to avoid SSR mismatch
       skipHydration: true,
+      version: 2,
+      /**
+       * v1→v2: PetCard replaced the flat `encounterCount`/`lastMetAt` pair
+       * with a real `encounters` log (Phase 1) and added `owned`. Normalize
+       * any card persisted under the old shape so existing local PetDexes
+       * don't crash on load.
+       */
+      migrate: (persisted) => {
+        const state = persisted as { collection?: Array<Record<string, unknown>> };
+        if (state?.collection) {
+          state.collection = state.collection.map((c) => {
+            if (Array.isArray(c.encounters)) return c;
+            const legacyCount = typeof c.encounterCount === "number" ? c.encounterCount : 1;
+            const lastMetAt = typeof c.lastMetAt === "string" ? c.lastMetAt : (c.createdAt as string);
+            const { encounterCount: _ec, lastMetAt: _lm, ...rest } = c;
+            return {
+              ...rest,
+              owned: c.owned ?? false,
+              encounters: Array.from({ length: Math.max(1, legacyCount) }, () => ({
+                date: lastMetAt, lat: c.lat ?? null, lng: c.lng ?? null, venueName: c.venueName ?? null,
+              })),
+            };
+          });
+        }
+        return state;
+      },
     }
   )
 );

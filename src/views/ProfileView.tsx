@@ -1,57 +1,46 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useAppStore, type Species } from "@/lib/store";
 import { SPECIES_EMOJI } from "@/components/icons";
-import { levelFromXp } from "@/lib/cardFactory";
+import { explorerLevelFromPoints } from "@/lib/cardFactory";
 import {
-  ACHIEVEMENTS, claimAchievement, currentCans, formatDuration, grantCans,
-  rarestCatch, todayKey, MAX_CANS, AD_DAILY_COINS,
+  ACHIEVEMENTS, claimAchievement, grantSnacks, mostFamiliarPet, todayKey,
+  canClaimSnackAdToday, claimSnackAdToday, metCount,
 } from "@/lib/economy";
 import SettingsSheet from "@/components/SettingsSheet";
 import RewardedAd from "@/components/RewardedAd";
-import BoostStore from "@/components/BoostStore";
-import { FOOD_CATALOG } from "@/lib/food";
+import PetFamilyCard from "@/components/PetFamilyCard";
+import ScanConnect from "@/components/ScanConnect";
 
 const SPECIES_ORDER: Species[] = ["dog", "cat", "rabbit", "bird", "other"];
 const SPECIES_COLOR: Record<Species, string> = {
   dog: "bg-tangerine", cat: "bg-sky", rabbit: "bg-bubblegum", bird: "bg-grass", other: "bg-sunny",
 };
 
-/** Profile — Field Journal, Stash, achievements, and stats (CatchCat-inspired). */
+/** Me — Field Journal, Stash, achievements, and stats. */
 export default function ProfileView() {
   const collection = useAppStore((s) => s.collection);
-  const userXp = useAppStore((s) => s.userXp);
-  const coins = useAppStore((s) => s.coins);
-  const treats = useAppStore((s) => s.treats);
+  const pawPoints = useAppStore((s) => s.pawPoints);
+  const snacks = useAppStore((s) => s.snacks);
   const streakDays = useAppStore((s) => s.streakDays);
   const lastCatchDay = useAppStore((s) => s.lastCatchDay);
   const claimed = useAppStore((s) => s.claimedAchievements);
-  const adCoinsDay = useAppStore((s) => s.adCoinsDay);
   const authUser = useAppStore((s) => s.authUser);
-  const cansState = useAppStore((s) => s.cans);
 
-  const foodInventory = useAppStore((s) => s.foodInventory);
   const [showSettings, setShowSettings] = useState(false);
-  const [showStore, setShowStore] = useState(false);
-  const [ad, setAd] = useState<null | "can" | "coins">(null);
-  const [, tick] = useState(0);
+  const [showAd, setShowAd] = useState(false);
+  const [showFamilyCard, setShowFamilyCard] = useState(false);
+  const [showScan, setShowScan] = useState(false);
 
-  // refresh the can timer every 30s while visible
-  useEffect(() => {
-    const t = setInterval(() => tick((n) => n + 1), 30_000);
-    return () => clearInterval(t);
-  }, []);
-
-  const total = collection.length;
-  const { level, intoLevel, perLevel } = levelFromXp(userXp);
-  const { count: cans, nextRefillMs } = currentCans();
-  void cansState; // subscribe so spending cans re-renders
+  const total = metCount();
+  const myPetsCount = collection.filter((c) => c.owned).length;
+  const { level, intoLevel, perLevel } = explorerLevelFromPoints(pawPoints);
   const today = todayKey();
   const todayCount = collection.filter((c) => c.createdAt.slice(0, 10) === today).length;
-  const rarest = rarestCatch();
+  const mostFamiliar = mostFamiliarPet();
   const streak = lastCatchDay === today || lastCatchDay === new Date(Date.now() - 86400000).toISOString().slice(0, 10) ? streakDays : 0;
-  const adCoinsUsed = adCoinsDay === today;
+  const adAvailable = canClaimSnackAdToday();
 
   return (
     <div className="flex flex-col gap-4 p-4">
@@ -61,14 +50,14 @@ export default function ProfileView() {
           <h1 className="text-2xl font-extrabold text-ink">
             {authUser?.name ?? authUser?.email?.split("@")[0] ?? "Pet Trainer"}
           </h1>
-          <p className="text-ink/60">{total} unique pets caught</p>
+          <p className="text-ink/60">{total} unique pets met{myPetsCount > 0 ? ` · ${myPetsCount} my pets` : ""}</p>
           <div className="mt-1.5 flex items-center gap-2">
             <span className="rounded-full bg-sunny px-2 py-0.5 text-xs font-extrabold text-ink">Lv.{level}</span>
             <div className="h-3 flex-1 overflow-hidden rounded-full bg-white shadow-inner">
               <div className="h-full rounded-full bg-gradient-to-r from-sunny to-tangerine transition-all"
                 style={{ width: `${Math.round((intoLevel / perLevel) * 100)}%` }} />
             </div>
-            <span className="text-xs font-bold text-ink/50">{intoLevel}/{perLevel} XP</span>
+            <span className="text-xs font-bold text-ink/50">{intoLevel}/{perLevel} pts</span>
           </div>
         </div>
         <button
@@ -81,7 +70,7 @@ export default function ProfileView() {
         </button>
       </header>
 
-      {/* Field Journal (Rarest / Today / Streak) */}
+      {/* Field Journal (Most Familiar / Today / Streak) */}
       <section className="rounded-card bg-white p-5 shadow-md">
         <div className="mb-3 flex items-baseline justify-between">
           <h2 className="text-lg font-extrabold">📖 Field Journal</h2>
@@ -89,10 +78,10 @@ export default function ProfileView() {
         </div>
         <div className="flex flex-col gap-2.5">
           <div className="flex items-center gap-3 rounded-2xl bg-sunny/30 px-4 py-3">
-            <span className="text-xl">⭐</span>
-            <span className="text-xs font-extrabold text-ink/50">RAREST</span>
-            <span className="ml-auto font-extrabold capitalize">
-              {rarest ? `${rarest.rarity} · ${rarest.name}` : "—"}
+            <span className="text-xl">🤝</span>
+            <span className="text-xs font-extrabold text-ink/50">MOST FAMILIAR</span>
+            <span className="ml-auto font-extrabold">
+              {mostFamiliar ? `${mostFamiliar.name} · ${mostFamiliar.encounterCount}×` : "—"}
             </span>
           </div>
           <div className="flex items-center gap-3 rounded-2xl bg-tangerine/20 px-4 py-3">
@@ -108,61 +97,53 @@ export default function ProfileView() {
         </div>
       </section>
 
-      {/* Stash: snack cans + currencies */}
+      {/* Pet Family — QR connections (spec §15) */}
+      <section className="rounded-card bg-white p-5 shadow-md">
+        <h2 className="mb-1 text-lg font-extrabold">🪪 Pet Family</h2>
+        <p className="mb-3 text-xs font-semibold text-ink/50">
+          Connect with other pet parents for free — share your calling card or scan theirs.
+        </p>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setShowFamilyCard(true)}
+            className="tappable flex-1 rounded-full bg-bubblegum px-4 py-3 text-sm font-extrabold text-white shadow-sm"
+          >
+            My Calling Card
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowScan(true)}
+            className="tappable flex-1 rounded-full bg-sky px-4 py-3 text-sm font-extrabold text-white shadow-sm"
+          >
+            Scan QR 🔗
+          </button>
+        </div>
+        {!authUser && <p className="mt-2 text-xs font-bold text-tangerine-deep">Sign in to get your own scannable code.</p>}
+      </section>
+
+      {/* Stash: Discovery Snacks + Paw Points */}
       <section className="rounded-card bg-white p-5 shadow-md">
         <h2 className="mb-3 text-lg font-extrabold">🎒 Stash</h2>
-        <div className="mb-1 flex items-center justify-between text-sm font-extrabold">
-          <span>🥫 Snack cans</span>
-          <span>{cans} / {MAX_CANS}{cans > MAX_CANS ? " (bonus!)" : ""}</span>
+        <div className="grid grid-cols-2 gap-2">
+          <span className="flex items-center justify-between rounded-2xl bg-cream px-4 py-3 font-extrabold">
+            🍬 Snacks <span>{snacks}</span>
+          </span>
+          <span className="flex items-center justify-between rounded-2xl bg-cream px-4 py-3 font-extrabold">
+            🐾 Paw Points <span>{pawPoints}</span>
+          </span>
         </div>
-        <div className="h-4 overflow-hidden rounded-full bg-cream">
-          <div className="h-full rounded-full bg-tangerine transition-all"
-            style={{ width: `${Math.min(100, (cans / MAX_CANS) * 100)}%` }} />
-        </div>
-        <p className="mt-1 text-xs font-semibold text-ink/50">
-          {nextRefillMs == null ? "Full — go catch something!" : `Next can in ${formatDuration(nextRefillMs)}`}
+        <button
+          type="button"
+          disabled={!adAvailable}
+          onClick={() => setShowAd(true)}
+          className="tappable mt-3 w-full rounded-full bg-sunny px-3 py-2.5 text-sm font-extrabold text-ink shadow-sm disabled:opacity-40"
+        >
+          🎬 Watch a video for +1 snack {adAvailable ? "" : "(done today)"}
+        </button>
+        <p className="mt-2 text-xs font-semibold text-ink/50">
+          A small free grant of snacks arrives every day you open the app.
         </p>
-        <div className="mt-3 flex gap-2">
-          <button
-            type="button"
-            onClick={() => setAd("can")}
-            className="tappable flex-1 rounded-full bg-sunny px-3 py-2.5 text-sm font-extrabold text-ink shadow-sm"
-          >
-            🎬 Bonus can
-          </button>
-          <button
-            type="button"
-            disabled={adCoinsUsed}
-            onClick={() => setAd("coins")}
-            className="tappable flex-1 rounded-full bg-sunny px-3 py-2.5 text-sm font-extrabold text-ink shadow-sm disabled:opacity-40"
-          >
-            🎬 +{AD_DAILY_COINS} coins {adCoinsUsed ? "(done today)" : "· 1/day"}
-          </button>
-        </div>
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          <span className="flex items-center justify-between rounded-2xl bg-cream px-4 py-3 font-extrabold">
-            🪙 Coins <span>{coins}</span>
-          </span>
-          <span className="flex items-center justify-between rounded-2xl bg-cream px-4 py-3 font-extrabold">
-            🍪 Treats <span>{treats}</span>
-          </span>
-        </div>
-
-        <div className="mt-3 flex items-center justify-between rounded-2xl bg-tangerine/10 px-4 py-3">
-          <span className="text-sm font-extrabold">
-            🍖 Pet food{" "}
-            <span className="text-ink/40">
-              ({FOOD_CATALOG.reduce((sum, f) => sum + (foodInventory[f.id] ?? 0), 0)} items)
-            </span>
-          </span>
-          <button
-            type="button"
-            onClick={() => setShowStore(true)}
-            className="tappable rounded-full bg-tangerine px-4 py-2 text-xs font-extrabold text-white shadow-sm"
-          >
-            🏪 Boost Store
-          </button>
-        </div>
       </section>
 
       {/* Achievements */}
@@ -209,7 +190,7 @@ export default function ProfileView() {
       <section className="rounded-card bg-white p-5 shadow-md">
         <h2 className="mb-3 text-lg font-extrabold">Collection Breakdown</h2>
         {total === 0 ? (
-          <p className="text-ink/60">Catch pets to see your stats bloom! 🌱</p>
+          <p className="text-ink/60">Meet pets to see your stats bloom! 🌱</p>
         ) : (
           <ul className="flex flex-col gap-3">
             {SPECIES_ORDER.map((species) => ({
@@ -234,18 +215,13 @@ export default function ProfileView() {
       </section>
 
       {showSettings && <SettingsSheet onClose={() => setShowSettings(false)} />}
-      {showStore && <BoostStore onClose={() => setShowStore(false)} />}
-      {ad && (
+      {showFamilyCard && <PetFamilyCard onClose={() => setShowFamilyCard(false)} />}
+      {showScan && <ScanConnect onClose={() => setShowScan(false)} />}
+      {showAd && (
         <RewardedAd
-          rewardLabel={ad === "can" ? "1 snack can" : `${AD_DAILY_COINS} coins`}
-          onComplete={() => {
-            if (ad === "can") grantCans(1);
-            else {
-              useAppStore.getState().addCoins(AD_DAILY_COINS);
-              useAppStore.getState().setAdCoinsDay(todayKey());
-            }
-          }}
-          onClose={() => setAd(null)}
+          rewardLabel="1 Discovery Snack"
+          onComplete={() => { grantSnacks(1); claimSnackAdToday(); }}
+          onClose={() => setShowAd(false)}
         />
       )}
     </div>

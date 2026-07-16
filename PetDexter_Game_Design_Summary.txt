@@ -1,0 +1,399 @@
+================================================================================
+PETDEXTER — COMPLETE USER JOURNEY & GAME MECHANICS SUMMARY
+As implemented in the codebase on 2026-07-14
+================================================================================
+
+This document describes exactly what the app does today, step by step, so
+each stage and mechanic can be judged: does it make sense, or does it need
+to change? Nothing here is aspirational — it's a read of the current code.
+
+
+================================================================================
+1. FIRST-TIME USER JOURNEY (cold start)
+================================================================================
+
+STEP 1 — Welcome screen (src/components/Welcome.tsx)
+  - Shows the PetDexter logo (corgi trading-card wordmark).
+  - Sign-in choices: Google, Email (magic link), or "Continue as Guest."
+  - A consent checkbox (linking to /legal/terms and /legal/privacy) must be
+    ticked before any sign-in path is usable.
+  - On an installed PWA, Google sign-in uses a popup (not a full-page
+    redirect) so the user is never bounced out to a browser tab.
+
+STEP 2 — Onboarding carousel (src/components/Onboarding.tsx), 6 slides:
+  1. "Spot real pets" — the premise.
+  2. "Use the camera" — how capture works.
+  3. "Feed to catch" — the throw-the-treat mechanic.
+  4. "Snack cans matter" — energy system intro.
+  5. "Feed for a boost" — Boost Store / branded food teaser.
+  6. "Explore & compete" — map, leaderboards, battles teaser.
+  - This screen doubles as the on-device AI model download progress bar
+    (Transformers.js models are fetched here, ~30-60MB total).
+  - Finishing grants 2 free "Basic Kibble" food items (one-time starter gift).
+
+STEP 3 — Main app unlocks (src/components/AppShell.tsx)
+  - Gate order: rehydrate local store → resolve any OAuth popup return →
+    init Supabase auth session → Welcome → Onboarding → main app.
+  - If the user had guest-mode catches before signing in, a one-time
+    "Import my guest catches" prompt appears (GuestImport.tsx / importGuest.ts).
+  - 5-tab bottom nav: Map · PetDex · Catch! (raised, circular) · Ranks · Me.
+
+
+================================================================================
+2. RETURNING-USER JOURNEY (every subsequent open)
+================================================================================
+
+  - WelcomeBack.tsx fires once per fresh app session (tracked via
+    sessionStorage, skipped on the user's very first-ever session and while
+    a guest-import prompt is pending).
+  - It shows ONE of:
+      a) A low-resource nudge if snack cans or coins are low — "You're
+         running low on snack cans! Watch a video to restock" (or buy with
+         coins via buyCanWithCoins(), 20 coins/can).
+      b) The next unclaimed achievement framed as a mission — "Ready to:
+         {achievement blurb}" with a Start-catching or Claim-reward CTA.
+  - This is the ONLY re-engagement hook currently implemented; there is no
+    push notification, just an in-app overlay on open.
+
+
+================================================================================
+3. THE CAPTURE LOOP (core gameplay)
+================================================================================
+
+CaptureView.tsx → capture.ts → CardReveal.tsx, roughly 5 seconds total.
+
+STEP 1 — Aim & throw
+  - Live camera feed (rear-facing). A dashed target reticle overlays the
+    frame. The user drags a treat-can button onto the camera view and
+    releases inside the frame to "throw" it.
+  - Costs 1 snack can (spendCan()); if empty, shows a "no_cans" message
+    with a rewarded-ad option for +1 can.
+  - A row of 5 static demo-photo "throws" exists as a fallback for testing
+    without a live pet in front of the camera.
+
+STEP 2 — Brew (fixed ~2s)
+  - The instant the treat lands, a photo is grabbed from the video frame.
+  - A minimum-2-second "Something is brewing…" animation plays (a bobbing
+    stew emoji + sparkles) while, in parallel, a FAST on-device
+    classification pass (ViT, WASM-only) checks: is there an animal, and
+    is it a real animal (not a photo of a screen)?
+  - If classification fails (no_animal / screen_detected / error), the
+    brew resolves to a "rejected" state with a retry prompt. No can is
+    refunded.
+
+STEP 3 — Instant card (no waiting)
+  - On a successful classification, an "egg" PetCard is minted immediately
+    (startCapture()): silly name, provisional rarity roll, base stats,
+    serial number, unhatched=true, WITH NO REWARDS GRANTED YET.
+  - The full-screen collector card reveal (CardReveal.tsx) appears at once:
+    photo in a rarity-colored frame, silly name, personality stat chips.
+  - The reward line reads "Calculating reward…" until the real outcome is
+    known (see Step 4) — never guesses upfront.
+  - Below the card: "🥚 Rarity: hatching… Return to your PetDex to see
+    what your pet has hatched into!"
+  - User can immediately dismiss and keep catching, or jump to the PetDex.
+
+STEP 4 — Background hatching (invisible, non-blocking)
+  - finalizeCapture() runs concurrently: cutout segmentation (RMBG-1.4,
+    WASM-only) → 384-dim DINOv2 identity embedding (WASM-only) →
+    resolveMatchAndReward().
+  - Dedupe: the new embedding is cosine-compared (threshold 0.80) against
+    every stored viewing angle (up to 3 per card) of every OTHER card of
+    the same species.
+      • No match → genuinely new pet. Cutout is composited onto one of 4
+        mystical/fairytale backdrops, card is marked hatched, rarity is
+        finalized (server may override via compute_rarity() if signed in),
+        and reward is granted: XP = 100 + rarity bonus (30-250), +10 coins,
+        +2 treats.
+      • Match found, but the matched card's last reward was < 4 hours ago
+        → recognized as the same pet, egg card is discarded (no duplicate),
+        a new viewing angle may still be stored, but NO reward is granted.
+        Reveal shows "You've met before recently — come back in Xh Ym."
+      • Match found, cooldown elapsed → revisit reward: level+1, +3 candy
+        to that pet's own stash, +30 XP, +3 coins. A new viewing angle is
+        stored if sufficiently different (helps recognize the pet from new
+        angles over time, capped at 3 stored angles/card).
+  - If signed in, the same dedupe/cooldown logic is re-run server-side
+    (Supabase RPC capture_pet, migration 0005) as the source of truth,
+    so clearing local storage can't bypass the cooldown.
+  - Whatever the outcome, the CardReveal overlay (if still open) updates
+    live to show the real reward. The PetDex card also updates once
+    hatched — from an egg icon to the finished, backdrop-composited image.
+
+
+================================================================================
+4. THE PETDEX (collection browser)
+================================================================================
+
+CollectionView.tsx — category-first, two levels deep:
+
+  LEVEL 1 — Species overview
+    - One tile per species the user has caught (Dogs/Cats/Rabbits/Birds/
+      Other), each showing: species icon, card count, best (rarest hatched)
+      rarity badge, and a fanned 3-card visual preview.
+    - Tapping a tile opens that species' card grid.
+
+  LEVEL 2 — Card grid within a species
+    - 2-column grid of "MiniCard" collector cards: rarity-tinted gradient
+      frame, mystical backdrop (or an egg/pulsing placeholder if still
+      hatching), species icon badge, level badge (Lv.N, if >1), star-rank
+      badge (⭐×N, if ascended), name in script font, rarity label, serial #.
+    - Tapping a card opens full CardDetail.
+
+  LEVEL 3 — Full card detail (CardDetail.tsx, full-screen portal overlay)
+    - Large art panel with backdrop, sparkle overlay, species/serial/level/
+      star-rank chips, venue-captured stamp if applicable.
+    - Name, breed, rarity chip, "Fed Nx · Powered by {brand}" note.
+    - Three personality stat bars (Chonkiness/Friendliness/Energy), each
+      shown RELATIVE TO THE CURRENT ASCENSION CAP (not a flat 100) —
+      e.g. "62/100" pre-ascension, "70/115" after first ascend.
+    - Battle panel: Cost, Power, and the card's own Candy balance.
+    - Tribes (personality archetypes derived from stats) + one keyword
+      ability with flavor text.
+    - Ascension panel (see §6) — the endgame answer for maxed stats.
+    - Feed panel (see §5) — spend owned food to raise stats.
+    - "Caught {date}" footer.
+
+
+================================================================================
+5. FOOD / BOOST STORE ECONOMY
+================================================================================
+
+food.ts + BoostStore.tsx — this is "Phase 1" of the branded-food redesign.
+
+  FOOD_CATALOG:
+    - Basic Kibble (PetDexter brand, generic/all-species, 6 total boost,
+      even split across stats) — cheap, low-value fallback.
+    - 4 premium, species-locked foods (18 total boost each, species-tuned
+      stat-weight split): PowerPets Dog Formula, PowerPets Cat Formula,
+      HopHop Rabbit Blend, WingFuel Seed Mix.
+
+  Acquiring food:
+    - 2 free Basic Kibble on first-ever onboarding completion.
+    - Watch a branded rewarded-video ad (1/food/day) via canClaimFoodAdToday.
+    - Buy with Treats at the Boost Store (8 treats for basic, 20 for premium).
+
+  Feeding a card (feedPet()):
+    - Match quality gates effectiveness: species match = 100% of the food's
+      boost, generic food = 50%, wrong-species food = 20%.
+    - The boost splits across the 3 stats per the food's weight profile,
+      clamped so no stat exceeds the card's CURRENT ascension cap.
+    - Any amount that would have overflowed the cap converts 1:1 into that
+      card's own Candy instead of being wasted — this is what always makes
+      feeding "pay off" even on a maxed-out pet, and it's exactly what
+      funds the next Ascension (see §6).
+    - Also grants trainer XP: 15 (match) / 8 (generic) / 3 (mismatch).
+    - Reaction toast: "{name} loved the {food}! 😻 +N stats" (or a
+      lukewarm/negative variant for generic/mismatch), noting overflow
+      candy if any was converted.
+
+
+================================================================================
+6. ASCENSION / EVOLUTION (the "what happens after 100%?" answer)
+================================================================================
+
+evolution.ts — added specifically because feeding alone hit a dead end once
+all 3 stats reached 100.
+
+  - Stat cap rises by rank: rank 0 → cap 100, rank 1 → 115, rank 2 → 130,
+    rank 3 (max) → 145.
+  - To evolve to the next rank, ALL THREE stats must currently be at the
+    rank's cap, AND the card must have enough of its own Candy (15/30/45
+    candy for rank 0→1, 1→2, 2→3 respectively).
+  - Evolving: raises starRank, spends the candy, permanently adds +2 Power
+    to that card's battle stats (on top of the rarity/stat-based Power),
+    and raises the stat cap so feeding becomes useful again.
+  - At max rank (3, "⭐⭐⭐"), the panel simply reads "Fully ascended —
+    max Power reached!" — a genuine ceiling, by design, at the top.
+  - This closes the loop: catch → feed (uses food) → cap out → evolve
+    (uses candy, which itself comes from revisits + feed-overflow) → higher
+    cap → feed again → eventually hit the true max at rank 3.
+
+
+================================================================================
+7. REVISIT / RE-SCAN MECHANIC & COOLDOWN (anti-exploit fix)
+================================================================================
+
+This directly answers the "is it too easy to level up by rescanning?" and
+"can it recognize the same pet from different angles?" questions.
+
+  - Recognition: every scan computes a fresh DINOv2 identity embedding and
+    compares it (cosine similarity, threshold 0.80) against up to 3 stored
+    viewing angles per existing card of the same species. Benchmarked
+    same-pet-different-angle scores land 0.79-0.94, so multiple stored
+    angles materially improve angle-robustness; a pet is never accidentally
+    minted as a brand-new duplicate once at least one matching angle has
+    been captured before.
+  - Reward gating: a matched (revisit) scan only pays out (level+1, +3
+    candy, +30 XP, +3 coins) if at least 4 REAL-WORLD HOURS have passed
+    since that pet's last rewarded revisit. Faster rescans are still
+    recognized (no duplicate card is created, and a sufficiently novel
+    angle may still be archived) but pay nothing.
+  - Enforced in TWO places for parity: client-side (capture.ts,
+    REVISIT_COOLDOWN_MS) for the offline/local-only path, and server-side
+    (Supabase RPC capture_pet, migration 0005, last_revisit_at column +
+    a 4-hour interval check) for signed-in users, so a user can't bypass
+    the limit by clearing local storage.
+  - Before this fix, EVERY scan (including ones that later turned out to
+    be revisits) granted the full new-discovery reward with zero rate
+    limiting — this was the actual bug behind "too easy to level up."
+
+
+================================================================================
+8. TRAINER-LEVEL PROGRESSION & CURRENCIES
+================================================================================
+
+  - Trainer XP/Level (cardFactory.ts levelFromXp): 250 XP per level, shown
+    as a progress bar on Profile. XP sources: new discovery (100 + rarity
+    bonus), revisit (30), feed match quality (15/8/3), Steal War win (50).
+  - Coins: earned from new discoveries (10), revisits (3), daily rewarded
+    ad (25/day), achievement rewards. Spent on: buying a snack can (20
+    coins) or buying food at the Boost Store.
+  - Treats: earned from new discoveries (2), achievement rewards. Spent
+    exclusively on buying food at the Boost Store (8/20 per item).
+  - Candy: earned per-card from revisits (+3) and from feed overflow. Spent
+    exclusively on that same card's own Ascension.
+  - Snack cans (scan energy): cap of 4, refill 1 every 3 hours, or buy with
+    20 coins, or watch a rewarded ad for +1 (uncapped — ad-granted cans can
+    exceed the 4 cap).
+    NOTE: the user separately described wanting a different economy (1
+    free can per day on reopen after 12h+ closed, 4 granted on first
+    login) — that alternate design has NOT been implemented; the app still
+    runs the original 3-hour/4-cap refill system described above.
+
+
+================================================================================
+9. ACHIEVEMENTS
+================================================================================
+
+economy.ts ACHIEVEMENTS — flat collection-size milestones, not currently
+species- or rarity-specific:
+  1. First Sighting (1 pet) → 50 coins
+  2. Curious Stray (5 pets) → 75 coins
+  3. Starter Pack (10 pets) → 3 cans — notably, 10 pets is also the exact
+     threshold that unlocks legendary/mythic rarity rolls (see §10), so
+     this achievement lines up with a real gameplay unlock.
+  4. Park Stroll (25 pets) → 150 coins + 10 treats
+  5. Herding Pets (50 pets) → 300 coins + 25 treats
+  - Claimed once each via claimAchievement(); shown on Profile with a
+    progress bar and a "Claim!" button once the goal is reached.
+  - Feeds the WelcomeBack "next mission" nudge (§2).
+
+
+================================================================================
+10. RARITY SYSTEM
+================================================================================
+
+cardFactory.ts rollRarity() — six tiers: common, uncommon, rare, epic,
+legendary, mythic.
+  - Weighted roll happens at CAPTURE time (hidden until hatch), locally;
+    if signed in, the server's compute_rarity() (based on real community
+    breed frequency) can override the locally-rolled rarity once synced.
+  - Legendary and mythic are GATED: they can only roll once the user's
+    local collection has 10+ pets already. Below that threshold, any
+    roll that would have been legendary/mythic instead becomes epic —
+    so a brand-new player's very first catches can still be "epic" but
+    never the top two tiers, preserving their rarity as something to
+    grow into rather than get on your very first throw.
+  - Rarity affects: discovery XP bonus (0/30/60/100/160/250), card frame
+    color, and battle Power (via rarity index).
+
+
+================================================================================
+11. BATTLES — "STEAL WARS" (async PvP over a contested pet)
+================================================================================
+
+battle.ts / BattleArena.tsx — currently two parallel paths:
+
+  - REAL path (server): capture_pet() (migration 0002/0005) detects when
+    a DIFFERENT signed-in user captures a pet at the same checked-in venue
+    that cosine-matches (≥0.80) a pet another user already owns there, and
+    opens a "battles" row. Each side would draw a random champion from
+    their own PetDex via a draw_champion RPC; resolution order is Power →
+    rarity → coin flip; loser's card is deleted. (The draw_champion RPC
+    consumption flow doesn't appear to be wired into the client UI yet —
+    BattleArena currently only drives the DEMO path below.)
+  - DEMO path (fully playable today, local-only): from the Catch tab,
+    "⚔️ Rival Steal War (demo)" picks one of the user's own cards as
+    "contested," fabricates a rival trainer name and a randomly-generated
+    rival champion, and runs the same power→rarity→coinflip resolution.
+    Winning grants +50 XP; losing PERMANENTLY REMOVES that card from the
+    user's PetDex.
+  - This is the only "social/competitive" mechanic currently built;
+    the broader Pokémon-style social system discussed (challenging other
+    real pet parents outside a shared venue, rankings tied to battles,
+    etc.) has not been built beyond this venue-triggered Steal War.
+
+
+================================================================================
+12. MAP (src/views/MapView.tsx)
+================================================================================
+
+  - MapLibre GL + MapTiler tiles (falls back to a free keyless demo style
+    if no MapTiler key is configured), centered on Manila.
+  - Clustered pins: the user's own local catches, plus (if Supabase is
+    configured) a community "map_discoveries" feed of other users' catches
+    — pins show a species emoji or a cluster count bubble.
+  - "Check In Here" — uses device geolocation, calls the check_in RPC; if
+    within 50m of a partner venue, checks the user in (stamps subsequent
+    captures with that venue name AND enables the venue-based Steal War
+    trigger for that session).
+
+
+================================================================================
+13. LEADERBOARDS (src/views/LeaderboardsView.tsx)
+================================================================================
+
+  - 4 tabs, each reading a distinct Supabase view: Global (unique pets by
+    region), Top Cat Catchers, Top Dog Trackers (species-filtered catch
+    counts), Breed Masters (documented breed counts).
+  - Entirely dependent on Supabase; shows an "offline"/"connect Supabase"
+    empty state if env vars aren't configured. Purely a read-only ranking
+    display — no direct interaction from here.
+
+
+================================================================================
+14. PROFILE (src/views/ProfileView.tsx)
+================================================================================
+
+  - Header: avatar emoji, display name (from auth or "Pet Trainer"), total
+    unique pets, trainer level + XP progress bar, settings gear.
+  - "Field Journal": rarest catch, catches today, current daily streak.
+  - "Stash": snack-can meter + refill timer, buttons for bonus-can ad and
+    daily +25-coin ad, coin/treat totals, food-item count with a Boost
+    Store shortcut.
+  - Achievements list (see §9).
+  - Collection Breakdown: percentage bar per species.
+  - Opens SettingsSheet (notifications toggle, legal links, feedback
+    mailto, "Load sample PetDex" demo loader, log out, delete account).
+
+
+================================================================================
+15. OPEN QUESTIONS / KNOWN GAPS TO DECIDE ON
+================================================================================
+
+  1. Snack-can economy mismatch: the user described wanting 1 free can/day
+     on reopen (after 12h+ closed) with 4 granted on first login. The
+     shipped system is instead a continuous 3-hour/4-cap refill. Decide
+     which model the game should actually use.
+  2. Pet accessories/upgrades (e.g., an "EzyDog harness" equipped from
+     CardDetail) — discussed, not built. Would need: an item catalog,
+     an "equipped" field on PetCard, a visual layer on the card art, and
+     a Power/stat effect.
+  3. Broader social/competitive layer beyond venue-triggered Steal Wars —
+     e.g. asynchronous challenges between any two pet parents, not just
+     people who happened to check in at the same place — not built.
+  4. The REVISIT_COOLDOWN_MS (4 hours) is an arbitrary starting value —
+     worth confirming it feels right once used in practice (too long?
+     too short to matter?).
+  5. draw_champion server RPC (real multi-user Steal Wars) is defined in
+     the schema but the client only drives the local DEMO battle path —
+     the real cross-user version isn't reachable from the UI yet.
+  6. Achievements are flat "total pets caught" milestones only — no
+     species-specific, rarity-specific, streak-specific, or
+     ascension-specific achievements yet, despite those systems existing.
+  7. Losing a Steal War permanently deletes a card from the PetDex with no
+     insurance/protection mechanic — worth confirming this severity is
+     intended, especially for a hard-won legendary/mythic pet.
+
+================================================================================

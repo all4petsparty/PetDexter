@@ -2,50 +2,38 @@
 
 import { useEffect, useState } from "react";
 import { useAppStore } from "@/lib/store";
-import { MAX_CANS } from "@/lib/economy";
 import { preloadModels, onModelProgress } from "@/lib/vision";
-import { grantStarterFoodIfNeeded } from "@/lib/food";
+import { grantStarterSnacksIfNeeded } from "@/lib/economy";
 
+/** 4-slide carousel per the wireframe spec §5. */
 const SLIDES = [
   {
-    title: "Spot real pets",
+    title: "Meet real pets",
     emoji: "🐾",
-    body: "PetDexter is a real-world pet spotting game. Verify dogs, cats, rabbits, and birds you meet and turn sightings into collectible cards.",
-    points: ["Find pets in the real world — parks, streets, cafés", "Each verified sighting becomes a sticker card", "Rarer breeds mint rarer cards"],
+    body: "PetDexter helps you meet, remember and reconnect with real pets — parks, streets, cafés, wherever you go.",
+    points: ["Verify a real dog, cat, rabbit, or bird you meet", "Each meeting becomes a card in your PetDex", "Cards are never lost or destroyed through play"],
   },
   {
-    title: "Use the camera",
-    emoji: "📸",
-    body: "Tap the orange paw button to log a real pet.",
-    points: ["Frame the pet clearly — head and body", "Only live animals count, not photos on a screen", "Scanning the same pet again levels it up instead"],
+    title: "Remember names and places",
+    emoji: "📝",
+    body: "Learn a pet's real name and where you met them — that's the whole point.",
+    points: ["Enter their name if you learn it, or leave it for later", "Every meeting logs the date and place", "Meeting the same pet again is a reunion, not a duplicate"],
   },
   {
-    title: "Feed to catch",
-    emoji: "🦴",
-    body: "When the scan verifies your new friend, seal the catch with a treat.",
-    points: ["Drag the treat onto the pet", "Land it to mint the card", "Every species has a favorite snack"],
+    title: "Connect now or later",
+    emoji: "🤝",
+    body: "Exchange a Pet Family calling card on the spot, or let PetDexter find the parent for you later.",
+    points: ["Scan a QR code to connect instantly, for free", "Or save the encounter and get matched later", "You control what's shared and with whom"],
   },
   {
-    title: "Snack cans matter",
-    emoji: "🥫",
-    body: `Each scan uses one snack can, so choose your tries wisely.`,
-    points: [`You carry up to ${MAX_CANS} cans`, "Cans recharge automatically over time", "Watch a rewarded ad for a bonus can"],
-  },
-  {
-    title: "Feed for a boost",
-    emoji: "🍖",
-    body: "The Boost Store sells branded pet food — feed the right brand to the right pet for the biggest stat boost.",
-    points: ["Dog food boosts dogs most, cat food boosts cats most", "Generic kibble works okay on anyone", "Earn food free by watching a short video, or buy it with treats"],
-  },
-  {
-    title: "Explore & compete",
-    emoji: "🗺️",
-    body: "The community map shows sightings other players logged near you.",
-    points: ["Check in at partner venues to stamp your cards", "Climb species and breed leaderboards", "Defend your pets in Steal Wars ⚔️"],
+    title: "Play quests and help adoption pets",
+    emoji: "🏆",
+    body: "Complete quests, climb verified leaderboards, and give adoptable pets more visibility.",
+    points: ["Location and event quests reward real exploration", "No pet is ever more \"valuable\" than another", "Support animal welfare organizations along the way"],
   },
 ];
 
-/** First-run explainer carousel (CatchCat-style, All4Pets palette). */
+/** First-run explainer carousel. */
 export default function Onboarding() {
   const setHasOnboarded = useAppStore((s) => s.setHasOnboarded);
   const [i, setI] = useState(0);
@@ -54,12 +42,12 @@ export default function Onboarding() {
   const last = i === SLIDES.length - 1;
 
   function finish() {
-    grantStarterFoodIfNeeded();
+    grantStarterSnacksIfNeeded();
     setHasOnboarded(true);
   }
 
   // The carousel doubles as the AI download screen — models arrive while
-  // the player reads, so the first scan starts instantly
+  // the player reads, so the first meeting starts instantly
   useEffect(() => {
     onModelProgress(setAiProgress);
     preloadModels();
@@ -125,7 +113,7 @@ export default function Onboarding() {
               onClick={() => (last ? finish() : setI(i + 1))}
               className="tappable rounded-full bg-tangerine px-6 py-3 font-extrabold text-white shadow-md"
             >
-              {last ? "Let's catch! 🐾" : "Next ›"}
+              {last ? "Let's meet pets! 🐾" : "Next ›"}
             </button>
           </div>
         </div>

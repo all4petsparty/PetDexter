@@ -75,7 +75,7 @@ export default function Welcome() {
         <div className="flex flex-col items-center gap-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/petdexter-logo.png" alt="PetDexter" className="w-56 max-w-[70%] drop-shadow-lg" />
-          <p className="font-script text-2xl text-ink/60">Spot real pets. Build your PetDex.</p>
+          <p className="font-script text-2xl text-ink/60">Meet pets. Remember them. Collect their stories.</p>
         </div>
 
         {emailMode ? (
@@ -159,8 +159,8 @@ export default function Welcome() {
         <div className="flex w-full justify-around rounded-card bg-white p-4 shadow-md">
           {[
             { emoji: "🔍", title: "Discover", sub: "Real pets" },
-            { emoji: "🏆", title: "Complete", sub: "Challenges" },
-            { emoji: "📈", title: "Level up", sub: "Your PetDex" },
+            { emoji: "🧠", title: "Remember", sub: "Names & places" },
+            { emoji: "🤝", title: "Connect", sub: "Pet parents" },
           ].map((f) => (
             <span key={f.title} className="flex flex-col items-center gap-0.5">
               <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cream text-2xl">
