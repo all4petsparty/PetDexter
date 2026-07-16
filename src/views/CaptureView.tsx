@@ -5,7 +5,7 @@ import { useAppStore } from "@/lib/store";
 import { preloadModels, grabFrame, classifyFrame, imageToDataUrl } from "@/lib/vision";
 import { startCapture, finalizeCapture } from "@/lib/capture";
 import { spendSnack, grantSnacks } from "@/lib/economy";
-import RewardedAd from "@/components/RewardedAd";
+import FullScreenAd from "@/components/FullScreenAd";
 import TreatThrower from "@/components/TreatThrower";
 import CaptureTutorial from "@/components/CaptureTutorial";
 
@@ -135,11 +135,19 @@ export default function CaptureView() {
 
       <TreatThrower zoneRef={frameRef} onThrow={handleTreatThrow} />
 
-      {rejectReason && (
+      {rejectReason === "no_snacks" ? (
+        <button
+          type="button"
+          onClick={() => setShowAd(true)}
+          className="tappable animate-pop-in rounded-2xl bg-tangerine/20 px-4 py-3 text-center font-bold text-tangerine-deep"
+        >
+          {REJECT_MESSAGES.no_snacks}
+        </button>
+      ) : rejectReason ? (
         <p className="animate-pop-in rounded-2xl bg-tangerine/20 px-4 py-3 text-center font-bold text-tangerine-deep">
           {REJECT_MESSAGES[rejectReason]}
         </p>
-      )}
+      ) : null}
 
       <section className="rounded-card bg-white p-4 shadow-md">
         <h2 className="font-extrabold">🧪 Demo throws</h2>
@@ -159,7 +167,13 @@ export default function CaptureView() {
       </section>
 
       {showAd && (
-        <RewardedAd rewardLabel="1 Discovery Snack" onComplete={() => grantSnacks(1)} onClose={() => setShowAd(false)} />
+        <FullScreenAd
+          onFinish={() => {
+            grantSnacks(1);
+            setShowAd(false);
+            setRejectReason(null);
+          }}
+        />
       )}
 
       <CaptureTutorial />

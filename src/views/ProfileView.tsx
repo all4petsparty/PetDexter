@@ -9,7 +9,7 @@ import {
   canClaimSnackAdToday, claimSnackAdToday, metCount,
 } from "@/lib/economy";
 import SettingsSheet from "@/components/SettingsSheet";
-import RewardedAd from "@/components/RewardedAd";
+import FullScreenAd from "@/components/FullScreenAd";
 import PetFamilyCard from "@/components/PetFamilyCard";
 import ScanConnect from "@/components/ScanConnect";
 
@@ -30,6 +30,7 @@ export default function ProfileView() {
 
   const [showSettings, setShowSettings] = useState(false);
   const [showAd, setShowAd] = useState(false);
+  const [adReadyToClaim, setAdReadyToClaim] = useState(false);
   const [showFamilyCard, setShowFamilyCard] = useState(false);
   const [showScan, setShowScan] = useState(false);
 
@@ -133,14 +134,28 @@ export default function ProfileView() {
             🐾 Paw Points <span>{pawPoints}</span>
           </span>
         </div>
-        <button
-          type="button"
-          disabled={!adAvailable}
-          onClick={() => setShowAd(true)}
-          className="tappable mt-3 w-full rounded-full bg-sunny px-3 py-2.5 text-sm font-extrabold text-ink shadow-sm disabled:opacity-40"
-        >
-          🎬 Watch a video for +1 snack {adAvailable ? "" : "(done today)"}
-        </button>
+        {adReadyToClaim ? (
+          <button
+            type="button"
+            onClick={() => {
+              grantSnacks(1);
+              claimSnackAdToday();
+              setAdReadyToClaim(false);
+            }}
+            className="tappable mt-3 w-full animate-wiggle rounded-full bg-grass px-3 py-2.5 text-sm font-extrabold text-white shadow-sm"
+          >
+            🎁 Claim your free snack!
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled={!adAvailable}
+            onClick={() => setShowAd(true)}
+            className="tappable mt-3 w-full rounded-full bg-sunny px-3 py-2.5 text-sm font-extrabold text-ink shadow-sm disabled:opacity-40"
+          >
+            🎬 Watch a video for +1 snack {adAvailable ? "" : "(done today)"}
+          </button>
+        )}
         <p className="mt-2 text-xs font-semibold text-ink/50">
           A small free grant of snacks arrives every day you open the app.
         </p>
@@ -218,10 +233,11 @@ export default function ProfileView() {
       {showFamilyCard && <PetFamilyCard onClose={() => setShowFamilyCard(false)} />}
       {showScan && <ScanConnect onClose={() => setShowScan(false)} />}
       {showAd && (
-        <RewardedAd
-          rewardLabel="1 Discovery Snack"
-          onComplete={() => { grantSnacks(1); claimSnackAdToday(); }}
-          onClose={() => setShowAd(false)}
+        <FullScreenAd
+          onFinish={() => {
+            setShowAd(false);
+            setAdReadyToClaim(true);
+          }}
         />
       )}
     </div>

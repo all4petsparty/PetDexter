@@ -35,6 +35,27 @@ export default function CaptureMyPet({ onClose }: { onClose: () => void }) {
   const [breed, setBreed] = useState("");
   const [traits, setTraits] = useState<string[]>([]);
 
+  // swipe-down-to-dismiss on the details sheet's drag handle
+  const [dragY, setDragY] = useState(0);
+  const draggingRef = useRef(false);
+  const dragStartYRef = useRef(0);
+
+  function handleDragStart(e: React.PointerEvent) {
+    draggingRef.current = true;
+    dragStartYRef.current = e.clientY;
+    (e.target as Element).setPointerCapture(e.pointerId);
+  }
+  function handleDragMove(e: React.PointerEvent) {
+    if (!draggingRef.current) return;
+    setDragY(Math.max(0, e.clientY - dragStartYRef.current));
+  }
+  function handleDragEnd() {
+    if (!draggingRef.current) return;
+    draggingRef.current = false;
+    if (dragY > 110) onClose();
+    else setDragY(0);
+  }
+
   useEffect(() => {
     if (photo) return; // camera not needed once we're on the details step
     let stream: MediaStream | undefined;
@@ -104,11 +125,23 @@ export default function CaptureMyPet({ onClose }: { onClose: () => void }) {
   if (photo) {
     return createPortal(
       <div className="fixed inset-0 z-[75] flex items-end justify-center bg-ink/60 backdrop-blur-sm" onClick={onClose}>
-        <div
-          className="animate-pop-in max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-t-card bg-white p-5 pb-8 shadow-2xl"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-ink/15" />
+        <div className="animate-pop-in w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="max-h-[92dvh] overflow-y-auto rounded-t-card bg-white p-5 pb-8 shadow-2xl"
+            style={{
+              transform: `translateY(${dragY}px)`,
+              transition: draggingRef.current ? "none" : "transform 0.2s ease-out",
+            }}
+          >
+            <div
+              className="-mx-5 -mt-5 mb-4 touch-none py-3"
+              onPointerDown={handleDragStart}
+              onPointerMove={handleDragMove}
+              onPointerUp={handleDragEnd}
+              onPointerCancel={handleDragEnd}
+            >
+              <div className="mx-auto h-1.5 w-12 rounded-full bg-ink/15" />
+            </div>
           <h2 className="mb-1 text-2xl font-extrabold">Nice shot! 📸</h2>
           <p className="mb-4 text-sm text-ink/50">Now tell us about them — this is free, no Discovery Snack spent.</p>
 
@@ -186,6 +219,7 @@ export default function CaptureMyPet({ onClose }: { onClose: () => void }) {
             >
               Save Pet 🐾
             </button>
+          </div>
           </div>
         </div>
       </div>,
