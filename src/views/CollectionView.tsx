@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useAppStore, type Species, type PetCard } from "@/lib/store";
 import { SPECIES_EMOJI } from "@/components/icons";
 import CardDetail from "@/components/CardDetail";
-import AddMyPet from "@/components/AddMyPet";
+import CaptureMyPet from "@/components/CaptureMyPet";
 
 const FRAME = "from-ink/20 to-ink/5";
 
@@ -273,7 +273,7 @@ export default function CollectionView() {
         />
       )}
 
-      {showAddPet && <AddMyPet onClose={() => setShowAddPet(false)} />}
+      {showAddPet && <CaptureMyPet onClose={() => setShowAddPet(false)} />}
     </div>
   );
 }

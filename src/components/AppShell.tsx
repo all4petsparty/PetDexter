@@ -9,6 +9,7 @@ import CardReveal from "@/components/CardReveal";
 import Welcome from "@/components/Welcome";
 import Onboarding from "@/components/Onboarding";
 import GuestImport from "@/components/GuestImport";
+import AddPetsPrompt from "@/components/AddPetsPrompt";
 import WelcomeBack from "@/components/WelcomeBack";
 import MapView from "@/views/MapView";
 import CollectionView from "@/views/CollectionView";
@@ -78,6 +79,7 @@ export default function AppShell() {
       <BottomNav />
       <CardReveal />
       <GuestImport />
+      <AddPetsPrompt />
       <WelcomeBack />
     </div>
   );

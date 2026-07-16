@@ -115,6 +115,9 @@ interface AppState {
   /** User id whose guest-catch import prompt has been handled (one-time). */
   guestImportDoneFor: string | null;
   setGuestImportDoneFor: (userId: string | null) => void;
+  /** True once the one-time "add your own pets" prompt has been shown/dismissed. */
+  myPetsPromptSeen: boolean;
+  setMyPetsPromptSeen: (v: boolean) => void;
 
   // Auth session (memory only — Supabase persists its own session)
   authUser: AuthUser | null;
@@ -173,6 +176,8 @@ export const useAppStore = create<AppState>()(
       setHasOnboarded: (hasOnboarded) => set({ hasOnboarded }),
       guestImportDoneFor: null,
       setGuestImportDoneFor: (guestImportDoneFor) => set({ guestImportDoneFor }),
+      myPetsPromptSeen: false,
+      setMyPetsPromptSeen: (myPetsPromptSeen) => set({ myPetsPromptSeen }),
 
       authUser: null,
       setAuthUser: (authUser) => set({ authUser }),
@@ -243,6 +248,7 @@ export const useAppStore = create<AppState>()(
         streakDays: s.streakDays,
         lastCatchDay: s.lastCatchDay,
         claimedAchievements: s.claimedAchievements,
+        myPetsPromptSeen: s.myPetsPromptSeen,
       }),
       // Rehydrated manually in AppShell after mount to avoid SSR mismatch
       skipHydration: true,

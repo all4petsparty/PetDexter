@@ -22,6 +22,7 @@ export default function WelcomeBack() {
   const setActiveView = useAppStore((s) => s.setActiveView);
   const authUser = useAppStore((s) => s.authUser);
   const guestImportDoneFor = useAppStore((s) => s.guestImportDoneFor);
+  const myPetsPromptSeen = useAppStore((s) => s.myPetsPromptSeen);
 
   const [open, setOpen] = useState(false);
   const [showAd, setShowAd] = useState(false);
@@ -31,6 +32,8 @@ export default function WelcomeBack() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (sessionStorage.getItem(SESSION_KEY)) return;
+    // don't collide with the one-time "add your own pets" prompt (first-ever login)
+    if (!myPetsPromptSeen) return;
     // don't collide with the first-sign-in guest-import prompt
     const importPending =
       authUser && collection.length > 0 && guestImportDoneFor !== authUser.id;
