@@ -75,6 +75,60 @@ export async function syncOwnedPetToSupabase(card: PetCard): Promise<void> {
   }
 }
 
+/**
+ * Push a newly-met pet (or a reunion's new encounter) up to Supabase so it
+ * appears on the community Discover map and leaderboards. No-ops silently
+ * when signed out — local-only/guest users keep the full local PetDex
+ * experience, just without community visibility. Note: this does NOT yet
+ * implement server-side canonical matching across different users meeting
+ * the same real pet (that's still deferred Phase 1 work) — each signed-in
+ * user's discovery becomes its own pet_profiles row for now.
+ */
+export async function syncMetPetToSupabase(card: PetCard): Promise<void> {
+  const authUser = useAppStore.getState().authUser;
+  if (!authUser) return;
+  try {
+    const { getSupabase } = await import("@/lib/supabase");
+    const supabase = getSupabase();
+    const remoteId = card.remoteId ?? crypto.randomUUID();
+
+    if (!card.remoteId) {
+      const { error: insertErr } = await supabase.from("pet_profiles").insert({
+        id: remoteId,
+        owner_user_id: authUser.id,
+        canonical_name: card.customName,
+        species: card.species,
+        breed: card.breed,
+        traits: card.traits,
+        visibility: "public",
+        status: "unclaimed",
+      });
+      if (insertErr) throw insertErr;
+
+      const photo = card.cutoutUrl ?? card.imageUrl;
+      if (photo && !photo.startsWith("/")) {
+        const url = await ensureUploaded(photo, authUser.id);
+        await supabase.from("pet_images").insert({ pet_id: remoteId, image_url: url, verified: true });
+      }
+      useAppStore.getState().updateCard(card.id, { remoteId });
+    }
+
+    const latest = card.encounters.at(-1);
+    if (latest) {
+      await supabase.from("encounters").insert({
+        user_id: authUser.id,
+        pet_id: remoteId,
+        occurred_at: latest.date,
+        lat: latest.lat,
+        lng: latest.lng,
+        status: card.encounters.length > 1 ? "revisit" : "new",
+      });
+    }
+  } catch (err) {
+    console.warn("[petdexter] couldn't sync met pet to Supabase (it still works locally):", err);
+  }
+}
+
 export interface ConnectResult {
   ownerName: string;
   imported: number;

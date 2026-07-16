@@ -2,6 +2,7 @@ import { useAppStore, type PetCard, type Species, type Encounter } from "@/lib/s
 import { cosineSimilarity, segmentPet, embedSignature } from "@/lib/vision";
 import { suggestNickname, POINTS_NEW_ENCOUNTER, POINTS_REUNION } from "@/lib/cardFactory";
 import { todayKey } from "@/lib/economy";
+import { syncMetPetToSupabase } from "@/lib/connections";
 
 /**
  * Re-identification threshold for DINOv2 cutout embeddings. Benchmarks:
@@ -131,6 +132,9 @@ export async function resolveMatchAndReward(
     store.addPawPoints(POINTS_REUNION);
     store.registerCatch(today);
     patch({ kind: "reunion", points: POINTS_REUNION, encounterCount: encounters.length });
+    // re-fetch: `store` is a stale pre-update snapshot, its .collection won't reflect updateCard() above
+    const updated = useAppStore.getState().collection.find((c) => c.id === bestId);
+    if (updated) syncMetPetToSupabase(updated); // background — never blocks the reveal
     return;
   }
 
@@ -139,4 +143,7 @@ export async function resolveMatchAndReward(
   store.addPawPoints(POINTS_NEW_ENCOUNTER);
   store.registerCatch(todayKey());
   patch({ kind: "new", points: POINTS_NEW_ENCOUNTER });
+  // re-fetch: `store` is a stale pre-update snapshot, its .collection won't reflect updateCard() above
+  const updated = useAppStore.getState().collection.find((c) => c.id === card.id);
+  if (updated) syncMetPetToSupabase(updated); // background — never blocks the reveal
 }
