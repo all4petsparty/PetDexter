@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAppStore } from "@/lib/store";
-import { preloadModels, onModelProgress } from "@/lib/vision";
+import { preloadModels, onModelProgress } from "@/lib/visionWorkerClient";
 import { grantStarterSnacksIfNeeded } from "@/lib/economy";
 
 /** 4-slide carousel per the wireframe spec §5. */

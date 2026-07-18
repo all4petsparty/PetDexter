@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useAppStore } from "@/lib/store";
-import { preloadModels, grabFrame, classifyFrame, imageToDataUrl } from "@/lib/vision";
+import { grabFrame, imageToDataUrl } from "@/lib/vision";
+import { preloadModels, classifyFrame } from "@/lib/visionWorkerClient";
 import { startCapture, finalizeCapture } from "@/lib/capture";
 import { spendSnack, refundSnack, grantSnacks } from "@/lib/economy";
 import FullScreenAd from "@/components/FullScreenAd";
@@ -44,11 +45,22 @@ export default function CaptureView() {
   const [rejectReason, setRejectReason] = useState<string | null>(null);
   const [showAd, setShowAd] = useState(false);
   const snacks = useAppStore((s) => s.snacks);
+  const modelsPreloadedRef = useRef(false);
+
+  // Model downloads/compilation happen in a worker (never blocks this
+  // thread — see visionWorkerClient.ts), but we still wait for the
+  // camera's first real frame before kicking it off, so starting the
+  // worker and fetching model files can't compete with the browser for
+  // bandwidth/CPU during the moment the live camera preview appears.
+  function handleCameraReady() {
+    if (modelsPreloadedRef.current) return;
+    modelsPreloadedRef.current = true;
+    preloadModels();
+  }
 
   useEffect(() => {
     if (activeView !== "meet") return;
     let stream: MediaStream | undefined;
-    preloadModels();
     (async () => {
       try {
         stream = await navigator.mediaDevices.getUserMedia({
@@ -58,6 +70,7 @@ export default function CaptureView() {
         setCameraError(null);
       } catch {
         setCameraError("Camera unavailable — allow camera access to meet pets!");
+        handleCameraReady(); // no video to wait for — demo throws still need the models
       }
     })();
     return () => stream?.getTracks().forEach((t) => t.stop());
@@ -123,7 +136,14 @@ export default function CaptureView() {
       </header>
 
       <div ref={frameRef} className="relative aspect-[3/4] overflow-hidden rounded-card bg-ink shadow-lg">
-        <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          onLoadedData={handleCameraReady}
+          className="h-full w-full object-cover"
+        />
         {cameraError && (
           <div className="absolute inset-0 flex items-center justify-center p-6 text-center font-bold text-white">
             {cameraError}

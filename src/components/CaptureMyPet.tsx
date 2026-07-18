@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAppStore, type Species, type PetCard } from "@/lib/store";
-import { preloadModels, grabFrame, classifyFrame } from "@/lib/vision";
+import { grabFrame } from "@/lib/vision";
+import { preloadModels, classifyFrame } from "@/lib/visionWorkerClient";
 import { syncOwnedPetToSupabase } from "@/lib/connections";
 import { SPECIES_EMOJI } from "@/components/icons";
 import TreatThrower from "@/components/TreatThrower";
@@ -56,10 +57,20 @@ export default function CaptureMyPet({ onClose }: { onClose: () => void }) {
     else setDragY(0);
   }
 
+  const modelsPreloadedRef = useRef(false);
+  // Model downloads/compilation run in a worker (never blocks this thread
+  // — see visionWorkerClient.ts), but we still wait for the camera's first
+  // real frame before kicking it off so it can't compete with the live
+  // preview appearing.
+  function handleCameraReady() {
+    if (modelsPreloadedRef.current) return;
+    modelsPreloadedRef.current = true;
+    preloadModels();
+  }
+
   useEffect(() => {
     if (photo) return; // camera not needed once we're on the details step
     let stream: MediaStream | undefined;
-    preloadModels();
     (async () => {
       try {
         stream = await navigator.mediaDevices.getUserMedia({
@@ -69,6 +80,7 @@ export default function CaptureMyPet({ onClose }: { onClose: () => void }) {
         setCameraError(null);
       } catch {
         setCameraError("Camera unavailable — allow camera access to capture your pet!");
+        handleCameraReady();
       }
     })();
     return () => stream?.getTracks().forEach((t) => t.stop());
@@ -242,7 +254,14 @@ export default function CaptureMyPet({ onClose }: { onClose: () => void }) {
       </header>
 
       <div ref={frameRef} className="relative aspect-[3/4] overflow-hidden rounded-card bg-ink shadow-lg">
-        <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          onLoadedData={handleCameraReady}
+          className="h-full w-full object-cover"
+        />
         {cameraError && (
           <div className="absolute inset-0 flex items-center justify-center p-6 text-center font-bold text-white">
             {cameraError}

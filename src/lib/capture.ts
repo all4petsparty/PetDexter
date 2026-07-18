@@ -1,5 +1,6 @@
 import { useAppStore, type PetCard, type Species, type Encounter } from "@/lib/store";
-import { cosineSimilarity, segmentPet, embedSignature } from "@/lib/vision";
+import { cosineSimilarity } from "@/lib/vision";
+import { segmentPet, embedSignature } from "@/lib/visionWorkerClient";
 import { suggestNickname, POINTS_NEW_ENCOUNTER, POINTS_REUNION } from "@/lib/cardFactory";
 import { todayKey } from "@/lib/economy";
 import { syncMetPetToSupabase } from "@/lib/connections";
